@@ -1,0 +1,16 @@
+default_role: engineer
+
+users:
+  alexmealing@gmail.com: engineer
+  alex@bonnard.ai: engineer
+  designer@test.com: designer
+
+roles:
+  engineer:
+    skills: [deploy-checklist, incident-response]
+    rules: [engineer-standards]
+    commands: [validate]
+  designer:
+    skills: [design-review]
+    rules: [design-standards]
+    commands: [review-assets]
