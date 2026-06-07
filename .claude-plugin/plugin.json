@@ -16,6 +16,10 @@
       "required": true
     }
   },
+  "statusLine": {
+    "type": "command",
+    "command": "node \"${CLAUDE_PLUGIN_ROOT}/bin/oc-statusline\""
+  },
   "mcpServers": {
     "org-context": {
       "type": "http",
