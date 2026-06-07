@@ -10,6 +10,9 @@ const API_URL = process.env.ORG_CONTEXT_API || 'http://localhost:3000/api'
 const HOME = process.env.HOME || homedir()
 const SYNC_TOKEN = process.env.CLAUDE_PLUGIN_OPTION_SYNCTOKEN || ''
 
+// Debug: dump env to file (temporary)
+writeFileSync(join(HOME, '.org-context-debug.json'), JSON.stringify(Object.fromEntries(Object.entries(process.env).filter(([k]) => k.startsWith('CLAUDE'))), null, 2))
+
 function safeName(name) {
   return name.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 100)
 }
