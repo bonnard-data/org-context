@@ -1,14 +1,16 @@
 #!/usr/bin/env node
-import { mkdirSync, writeFileSync, readdirSync, rmSync, readFileSync, chmodSync } from 'node:fs'
+import { mkdirSync, writeFileSync, readdirSync, rmSync, readFileSync, chmodSync, existsSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { homedir } from 'node:os'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const PLUGIN_ROOT = process.env.CLAUDE_PLUGIN_ROOT || join(__dirname, '..', '..')
+const PLUGIN_DATA = process.env.CLAUDE_PLUGIN_DATA || join(HOME, '.claude', 'plugins', 'data', 'org-context')
 const API_URL = process.env.ORG_CONTEXT_API || 'http://localhost:3000/api'
 const HOME = process.env.HOME || homedir()
 const SYNC_TOKEN = process.env.CLAUDE_PLUGIN_OPTION_SYNCTOKEN || ''
+const PROJECT_DIR = process.env.CLAUDE_PROJECT_DIR
 
 function safeName(name) {
   return name.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 100)
@@ -53,12 +55,10 @@ try {
   }
 
   // Write rules to project scope if available, otherwise global
-  const projectDir = process.env.CLAUDE_PROJECT_DIR
-  const rulesDir = projectDir
-    ? join(projectDir, '.claude', 'rules')
+  const rulesDir = PROJECT_DIR
+    ? join(PROJECT_DIR, '.claude', 'rules')
     : join(HOME, '.claude', 'rules')
   mkdirSync(rulesDir, { recursive: true })
-  // Clean old oc- prefixed rules before writing new ones
   try {
     for (const f of readdirSync(rulesDir)) {
       if (f.startsWith('oc-') && f.endsWith('.md')) rmSync(join(rulesDir, f), { force: true })
@@ -73,7 +73,7 @@ try {
   mkdirSync(binDir, { recursive: true })
   try {
     for (const f of readdirSync(binDir)) {
-      if (f.startsWith('oc-')) rmSync(join(binDir, f), { force: true })
+      if (f.startsWith('oc-') && f !== 'oc-statusline') rmSync(join(binDir, f), { force: true })
     }
   } catch {}
   for (const tool of data.cliTools || []) {
@@ -90,13 +90,32 @@ try {
     )
   }
 
+  // Set up statusLine wrapper in project-local settings
+  if (PROJECT_DIR) {
+    setupStatusLine(PROJECT_DIR)
+  }
+
   const cliCount = (data.cliTools || []).length
   const mcpCount = Object.keys(data.mcpServers || {}).length
+
+  // Check alert count for additionalContext
+  let alertInfo = ''
+  try {
+    const alertRes = await fetch(`${API_URL}/alerts/count`, {
+      headers: { 'Authorization': `Bearer ${SYNC_TOKEN}` },
+      signal: AbortSignal.timeout(2000),
+    })
+    if (alertRes.ok) {
+      const { count } = await alertRes.json()
+      if (count > 0) alertInfo = ` 🔔 ${count} pending alert${count > 1 ? 's' : ''} — ask me to check alerts.`
+    }
+  } catch {}
+
   const output = {
     hookSpecificOutput: {
       hookEventName: 'SessionStart',
       reloadSkills: true,
-      additionalContext: `[Org Context] Synced for ${data.email} (teams: ${(data.teams || []).join(', ') || 'none'}). ${(data.skills || []).length} skills, ${(data.rules || []).length} rules, ${cliCount} CLI tools, ${mcpCount} MCPs.`
+      additionalContext: `[Org Context] Synced for ${data.email} (teams: ${(data.teams || []).join(', ') || 'none'}). ${(data.skills || []).length} skills, ${(data.rules || []).length} rules, ${cliCount} CLI tools, ${mcpCount} MCPs.${alertInfo}`
     }
   }
   process.stdout.write(JSON.stringify(output))
@@ -109,4 +128,64 @@ try {
     }
   }
   process.stdout.write(JSON.stringify(output))
+}
+
+function setupStatusLine(projectDir) {
+  try {
+    mkdirSync(PLUGIN_DATA, { recursive: true })
+
+    // Read user's existing global statusLine command
+    let userCommand = ''
+    try {
+      const globalSettings = JSON.parse(readFileSync(join(HOME, '.claude', 'settings.json'), 'utf-8'))
+      userCommand = globalSettings?.statusLine?.command || ''
+    } catch {}
+
+    // Write wrapper script that runs user's command + appends alert badge
+    const wrapperPath = join(PLUGIN_DATA, 'statusline-wrapper.sh')
+    const wrapperScript = `#!/bin/bash
+# Org Context statusLine wrapper — runs user's statusLine + appends alert count
+input=$(cat)
+
+# Run user's original statusLine (if any)
+${userCommand ? `echo "$input" | (${userCommand})` : `
+model=$(echo "$input" | jq -r '.model.display_name // ""')
+dir=$(echo "$input" | jq -r '.workspace.current_dir // ""' | xargs basename)
+branch=$(echo "$input" | jq -r '.workspace.git_branch // ""')
+if [ -n "$branch" ]; then
+  printf "\\033[2m%s \\033[36m(%s)\\033[0m \\033[2m| %s\\033[0m" "$dir" "$branch" "$model"
+else
+  printf "\\033[2m%s | %s\\033[0m" "$dir" "$model"
+fi`}
+
+# Append alert count (second line)
+TOKEN="${SYNC_TOKEN}"
+API="${API_URL}"
+if [ -n "$TOKEN" ]; then
+  count=$(curl -sf -m 2 -H "Authorization: Bearer $TOKEN" "$API/alerts/count" 2>/dev/null | jq -r '.count // 0')
+  if [ "$count" -gt 0 ] 2>/dev/null; then
+    printf "\\n\\033[33m🔔 %s alert%s\\033[0m" "$count" "$([ "$count" -gt 1 ] && echo 's' || echo '')"
+  fi
+fi
+`
+    writeFileSync(wrapperPath, wrapperScript)
+    chmodSync(wrapperPath, 0o755)
+
+    // Write project-local settings with statusLine pointing to wrapper
+    const localSettingsPath = join(projectDir, '.claude', 'settings.local.json')
+    let localSettings = {}
+    try {
+      localSettings = JSON.parse(readFileSync(localSettingsPath, 'utf-8'))
+    } catch {}
+
+    localSettings.statusLine = {
+      type: 'command',
+      command: `bash "${wrapperPath}"`,
+    }
+
+    mkdirSync(join(projectDir, '.claude'), { recursive: true })
+    writeFileSync(localSettingsPath, JSON.stringify(localSettings, null, 2) + '\n')
+  } catch (err) {
+    process.stderr.write(`[Org Context] StatusLine setup failed: ${err.message}\n`)
+  }
 }
