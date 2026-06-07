@@ -1,2 +1,2 @@
 #!/bin/bash
-echo "{\"Authorization\": \"Bearer ${CLAUDE_PLUGIN_OPTION_SYNCTOKEN}\"}"
+echo "{\"x-api-key\": \"${CLAUDE_PLUGIN_OPTION_APIKEY}\"}"

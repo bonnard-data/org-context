@@ -8,18 +8,18 @@ const __dirname = dirname(fileURLToPath(import.meta.url))
 const PLUGIN_ROOT = process.env.CLAUDE_PLUGIN_ROOT || join(__dirname, '..', '..')
 const API_URL = process.env.ORG_CONTEXT_API || 'http://localhost:3000/api'
 const HOME = process.env.HOME || homedir()
-const SYNC_TOKEN = process.env.CLAUDE_PLUGIN_OPTION_SYNCTOKEN || ''
+const API_KEY = process.env.CLAUDE_PLUGIN_OPTION_APIKEY || ''
 
 function safeName(name) {
   return name.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 100)
 }
 
-if (!SYNC_TOKEN) {
-  process.stderr.write('No sync token configured. Set your sync token in the plugin settings.\n')
+if (!API_KEY) {
+  process.stderr.write('No API key configured. Set your API key in the plugin settings.\n')
   const output = {
     hookSpecificOutput: {
       hookEventName: 'SessionStart',
-      additionalContext: '[Org Context] No sync token configured. Run: curl -X POST -H "Authorization: Bearer <session>" http://localhost:3000/api/sync-token to generate one, then set it in plugin settings.'
+      additionalContext: '[Org Context] No API key configured. Generate one from the Install page in the dashboard, then set it in plugin settings.'
     }
   }
   process.stdout.write(JSON.stringify(output))
@@ -28,7 +28,7 @@ if (!SYNC_TOKEN) {
 
 try {
   const res = await fetch(`${API_URL}/sync`, {
-    headers: { 'Authorization': `Bearer ${SYNC_TOKEN}` },
+    headers: { 'x-api-key': API_KEY },
     signal: AbortSignal.timeout(5000),
   })
 

@@ -8,10 +8,10 @@
   "license": "MIT",
   "skills": "./skills/",
   "userConfig": {
-    "syncToken": {
+    "apiKey": {
       "type": "string",
-      "title": "Sync Token",
-      "description": "Your Org Context sync token. Get it from the dashboard or run: curl -X POST -H 'Authorization: Bearer <session>' http://localhost:3000/api/sync-token",
+      "title": "API Key",
+      "description": "Your Org Context API key. Generate one from the Install page in the dashboard.",
       "sensitive": false,
       "required": true
     }
