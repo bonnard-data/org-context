@@ -1,23 +1,23 @@
 {
-  "name": "plugin-builder",
-  "description": "Plugin Builder — personalized skills, rules, and docs for AI coding assistants",
+  "name": "org-context",
+  "description": "Org Context — personalized skills, rules, and docs for AI coding assistants",
   "author": {
     "name": "Bonnard"
   },
-  "repository": "https://github.com/bonnard-data/plugin-builder-plugin",
+  "repository": "https://github.com/bonnard-data/org-context",
   "license": "MIT",
   "skills": "./skills/",
   "userConfig": {
     "syncToken": {
       "type": "string",
       "title": "Sync Token",
-      "description": "Your Plugin Builder sync token. Get it from the dashboard or run: curl -X POST -H 'Authorization: Bearer <session>' http://localhost:3000/api/sync-token",
+      "description": "Your Org Context sync token. Get it from the dashboard or run: curl -X POST -H 'Authorization: Bearer <session>' http://localhost:3000/api/sync-token",
       "sensitive": false,
       "required": true
     }
   },
   "mcpServers": {
-    "plugin-builder": {
+    "org-context": {
       "type": "http",
       "url": "http://localhost:3000/mcp",
       "oauth": {}

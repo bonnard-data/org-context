@@ -1,5 +1,5 @@
 {
-  "description": "Plugin Builder — syncs role-specific content on session start",
+  "description": "Org Context — syncs team-specific content on session start",
   "hooks": {
     "SessionStart": [
       {

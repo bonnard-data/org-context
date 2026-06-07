@@ -6,7 +6,7 @@ import { homedir } from 'node:os'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const PLUGIN_ROOT = process.env.CLAUDE_PLUGIN_ROOT || join(__dirname, '..', '..')
-const API_URL = process.env.PLUGIN_BUILDER_API || 'http://localhost:3000/api'
+const API_URL = process.env.ORG_CONTEXT_API || 'http://localhost:3000/api'
 const HOME = process.env.HOME || homedir()
 const SYNC_TOKEN = process.env.CLAUDE_PLUGIN_OPTION_SYNCTOKEN || ''
 
@@ -19,7 +19,7 @@ if (!SYNC_TOKEN) {
   const output = {
     hookSpecificOutput: {
       hookEventName: 'SessionStart',
-      additionalContext: '[Plugin Builder] No sync token configured. Run: curl -X POST -H "Authorization: Bearer <session>" http://localhost:3000/api/sync-token to generate one, then set it in plugin settings.'
+      additionalContext: '[Org Context] No sync token configured. Run: curl -X POST -H "Authorization: Bearer <session>" http://localhost:3000/api/sync-token to generate one, then set it in plugin settings.'
     }
   }
   process.stdout.write(JSON.stringify(output))
@@ -64,11 +64,11 @@ try {
   mkdirSync(binDir, { recursive: true })
   try {
     for (const f of readdirSync(binDir)) {
-      if (f.startsWith('pb-')) rmSync(join(binDir, f), { force: true })
+      if (f.startsWith('oc-')) rmSync(join(binDir, f), { force: true })
     }
   } catch {}
   for (const tool of data.cliTools || []) {
-    const toolPath = join(binDir, `pb-${safeName(tool.name)}`)
+    const toolPath = join(binDir, `oc-${safeName(tool.name)}`)
     writeFileSync(toolPath, tool.content)
     chmodSync(toolPath, 0o755)
   }
@@ -87,16 +87,16 @@ try {
     hookSpecificOutput: {
       hookEventName: 'SessionStart',
       reloadSkills: true,
-      additionalContext: `[Plugin Builder] Synced for ${data.email} (teams: ${(data.teams || []).join(', ') || 'none'}). ${(data.skills || []).length} skills, ${(data.rules || []).length} rules, ${cliCount} CLI tools, ${mcpCount} MCPs.`
+      additionalContext: `[Org Context] Synced for ${data.email} (teams: ${(data.teams || []).join(', ') || 'none'}). ${(data.skills || []).length} skills, ${(data.rules || []).length} rules, ${cliCount} CLI tools, ${mcpCount} MCPs.`
     }
   }
   process.stdout.write(JSON.stringify(output))
 } catch (err) {
-  process.stderr.write(`Plugin Builder sync failed: ${err.message}\n`)
+  process.stderr.write(`Org Context sync failed: ${err.message}\n`)
   const output = {
     hookSpecificOutput: {
       hookEventName: 'SessionStart',
-      additionalContext: `[Plugin Builder] Sync failed: ${err.message}`
+      additionalContext: `[Org Context] Sync failed: ${err.message}`
     }
   }
   process.stdout.write(JSON.stringify(output))

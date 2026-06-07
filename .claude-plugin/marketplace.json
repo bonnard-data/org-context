@@ -1,13 +1,13 @@
 {
-  "name": "bonnard-plugin-builder",
+  "name": "bonnard-org-context",
   "owner": {
     "name": "Bonnard"
   },
   "plugins": [
     {
-      "name": "plugin-builder",
+      "name": "org-context",
       "source": "./",
-      "description": "Plugin Builder — personalized skills, rules, and docs for AI coding assistants"
+      "description": "Org Context — personalized skills, rules, and docs for AI coding assistants"
     }
   ]
 }

@@ -1,5 +1,5 @@
 #!/bin/bash
-# pb — Plugin Builder CLI
+# oc — Org Context CLI
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "$SCRIPT_DIR/.." && pwd)}"
 
@@ -26,7 +26,7 @@ case "${1:-help}" in
     echo "Role:  $role"
     ;;
   status)
-    echo "Plugin Builder v0.1.0"
+    echo "Org Context v0.1.0"
     echo "Root:     $PLUGIN_ROOT"
     skill_count=$(find "$PLUGIN_ROOT/skills" -name "SKILL.md" 2>/dev/null | wc -l | tr -d ' ')
     cmd_count=$(find "$PLUGIN_ROOT/commands" -name "*.md" 2>/dev/null | wc -l | tr -d ' ')
@@ -34,13 +34,16 @@ case "${1:-help}" in
     echo "Commands: $cmd_count"
     ;;
   sync)
-    API_URL="${PLUGIN_BUILDER_API:-http://localhost:3000/api}"
-    email=$(resolve_email)
-    response=$(curl -sf "${API_URL}/sync?email=${email}" 2>/dev/null)
+    API_URL="${ORG_CONTEXT_API:-http://localhost:3000/api}"
+    TOKEN="$CLAUDE_PLUGIN_OPTION_SYNCTOKEN"
+    if [ -z "$TOKEN" ]; then
+      echo "No sync token configured."
+      exit 1
+    fi
+    response=$(curl -sf -H "Authorization: Bearer $TOKEN" "${API_URL}/sync" 2>/dev/null)
     if [ -n "$response" ]; then
-      role=$(echo "$response" | python3 -c "import sys,json; print(json.load(sys.stdin)['role'])" 2>/dev/null)
       skill_count=$(echo "$response" | python3 -c "import sys,json; print(len(json.load(sys.stdin)['skills']))" 2>/dev/null)
-      # Write skills
+      teams=$(echo "$response" | python3 -c "import sys,json; print(', '.join(json.load(sys.stdin)['teams']))" 2>/dev/null)
       find "$PLUGIN_ROOT/skills" -mindepth 1 -maxdepth 1 -type d -exec rm -rf {} + 2>/dev/null
       export PLUGIN_ROOT
       echo "$response" | python3 -c "
@@ -53,29 +56,26 @@ for skill in data['skills']:
     with open(os.path.join(d, 'SKILL.md'), 'w') as f:
         f.write(skill['content'])
 " 2>/dev/null
-      echo "Synced via API for $email (role: $role). $skill_count skills."
+      echo "Synced (teams: $teams). $skill_count skills."
     else
-      echo "API unavailable, falling back to local sync."
-      bash "$PLUGIN_ROOT/hooks/scripts/sync.sh" 2>/dev/null
+      echo "API unavailable."
     fi
     ;;
   validate)
     errors=0
-    test -f "$PLUGIN_ROOT/plugin.yaml" && echo "  [OK] plugin.yaml" || { echo "  [FAIL] plugin.yaml missing"; errors=$((errors+1)); }
     test -f "$PLUGIN_ROOT/.claude-plugin/plugin.json" && echo "  [OK] plugin.json" || { echo "  [FAIL] plugin.json missing"; errors=$((errors+1)); }
     test -f "$PLUGIN_ROOT/hooks/hooks.json" && echo "  [OK] hooks.json" || { echo "  [FAIL] hooks.json missing"; errors=$((errors+1)); }
-    test -x "$PLUGIN_ROOT/bin/pb" && echo "  [OK] bin/pb executable" || { echo "  [FAIL] bin/pb not executable"; errors=$((errors+1)); }
-    test -d "$PLUGIN_ROOT/content/shared" && echo "  [OK] content/shared exists" || { echo "  [FAIL] content/shared missing"; errors=$((errors+1)); }
+    test -x "$PLUGIN_ROOT/bin/oc" && echo "  [OK] bin/oc executable" || { echo "  [FAIL] bin/oc not executable"; errors=$((errors+1)); }
     echo "Validation: $errors error(s)"
     exit $errors
     ;;
   help|*)
-    echo "pb — Plugin Builder CLI"
+    echo "oc — Org Context CLI"
     echo ""
     echo "Commands:"
     echo "  whoami     Show current user and role"
     echo "  status     Show plugin status"
-    echo "  sync       Force re-sync content for current role"
+    echo "  sync       Force re-sync content"
     echo "  validate   Run installation checks"
     echo "  help       Show this help"
     ;;
