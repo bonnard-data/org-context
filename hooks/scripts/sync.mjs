@@ -8,15 +8,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url))
 const PLUGIN_ROOT = process.env.CLAUDE_PLUGIN_ROOT || join(__dirname, '..', '..')
 const API_URL = process.env.PLUGIN_BUILDER_API || 'http://localhost:3000/api'
 const HOME = process.env.HOME || homedir()
-// Try both cases — docs unclear on casing convention
-const SYNC_TOKEN = process.env.CLAUDE_PLUGIN_OPTION_SYNC_TOKEN
-  || process.env.CLAUDE_PLUGIN_OPTION_syncToken
-  || ''
-
-// Debug: dump plugin env vars to file for inspection
-const pluginVars = Object.entries(process.env).filter(([k]) => k.startsWith('CLAUDE'))
-const debugPath = join(HOME, '.plugin-builder-debug.json')
-writeFileSync(debugPath, JSON.stringify(Object.fromEntries(pluginVars), null, 2))
+const SYNC_TOKEN = process.env.CLAUDE_PLUGIN_OPTION_SYNCTOKEN || ''
 
 function safeName(name) {
   return name.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 100)
