@@ -12,7 +12,7 @@
       "type": "string",
       "title": "Sync Token",
       "description": "Your Plugin Builder sync token. Get it from the dashboard or run: curl -X POST -H 'Authorization: Bearer <session>' http://localhost:3000/api/sync-token",
-      "sensitive": true,
+      "sensitive": false,
       "required": true
     }
   },
