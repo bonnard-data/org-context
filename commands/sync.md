@@ -1,9 +1,9 @@
 ---
-description: Force re-sync skills and rules from plugin config
+description: Show sync status — skills, rules, teams, and MCPs for current user
 allowed-tools: Bash("${CLAUDE_PLUGIN_ROOT}/bin/oc":*)
 ---
 
-Run the sync command and report what changed:
+Run the sync command and report the results:
 
 ```bash
 "${CLAUDE_PLUGIN_ROOT}/bin/oc" sync

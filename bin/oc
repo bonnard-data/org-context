@@ -1,82 +1,372 @@
-#!/bin/bash
-# oc — Org Context CLI
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "$SCRIPT_DIR/.." && pwd)}"
+#!/usr/bin/env node
 
-resolve_email() {
-  local email=$(python3 -c "import json; print(json.load(open('$HOME/.claude.json'))['oauthAccount']['emailAddress'])" 2>/dev/null)
-  echo "${email:-unknown}"
+const { readFileSync } = require('node:fs')
+
+const API_KEY = process.env.CLAUDE_PLUGIN_OPTION_APIKEY || ''
+const API_URL = process.env.ORG_CONTEXT_API || 'http://localhost:3000/api'
+const JSON_OUTPUT = process.argv.includes('--json')
+
+// ANSI colors
+const dim = (s) => `\x1b[2m${s}\x1b[0m`
+const bold = (s) => `\x1b[1m${s}\x1b[0m`
+const green = (s) => `\x1b[32m${s}\x1b[0m`
+const red = (s) => `\x1b[31m${s}\x1b[0m`
+const yellow = (s) => `\x1b[33m${s}\x1b[0m`
+
+function die(msg) {
+  console.error(red(`Error: ${msg}`))
+  process.exit(1)
 }
 
-resolve_role() {
-  local email=$(resolve_email)
-  local config="$PLUGIN_ROOT/plugin.yaml"
-  local role=$(grep "^  ${email}:" "$config" 2>/dev/null | awk '{print $2}')
-  if [ -z "$role" ]; then
-    role=$(grep "^default_role:" "$config" | awk '{print $2}')
-  fi
-  echo "${role:-engineer}"
+function parseFlags(args) {
+  const flags = {}
+  const positional = []
+  for (let i = 0; i < args.length; i++) {
+    if (args[i] === '--json') continue
+    if (args[i].startsWith('--')) {
+      const key = args[i].slice(2)
+      flags[key] = args[i + 1] || true
+      i++
+    } else {
+      positional.push(args[i])
+    }
+  }
+  return { flags, positional }
 }
 
-case "${1:-help}" in
-  whoami)
-    email=$(resolve_email)
-    role=$(resolve_role)
-    echo "Email: $email"
-    echo "Role:  $role"
-    ;;
-  status)
-    echo "Org Context v0.1.0"
-    echo "Root:     $PLUGIN_ROOT"
-    skill_count=$(find "$PLUGIN_ROOT/skills" -name "SKILL.md" 2>/dev/null | wc -l | tr -d ' ')
-    cmd_count=$(find "$PLUGIN_ROOT/commands" -name "*.md" 2>/dev/null | wc -l | tr -d ' ')
-    echo "Skills:   $skill_count"
-    echo "Commands: $cmd_count"
-    ;;
-  sync)
-    API_URL="${ORG_CONTEXT_API:-http://localhost:3000/api}"
-    TOKEN="$CLAUDE_PLUGIN_OPTION_SYNCTOKEN"
-    if [ -z "$TOKEN" ]; then
-      echo "No sync token configured."
-      exit 1
-    fi
-    response=$(curl -sf -H "Authorization: Bearer $TOKEN" "${API_URL}/sync" 2>/dev/null)
-    if [ -n "$response" ]; then
-      skill_count=$(echo "$response" | python3 -c "import sys,json; print(len(json.load(sys.stdin)['skills']))" 2>/dev/null)
-      teams=$(echo "$response" | python3 -c "import sys,json; print(', '.join(json.load(sys.stdin)['teams']))" 2>/dev/null)
-      find "$PLUGIN_ROOT/skills" -mindepth 1 -maxdepth 1 -type d -exec rm -rf {} + 2>/dev/null
-      export PLUGIN_ROOT
-      echo "$response" | python3 -c "
-import sys, json, os
-data = json.load(sys.stdin)
-root = os.environ['PLUGIN_ROOT']
-for skill in data['skills']:
-    d = os.path.join(root, 'skills', skill['name'])
-    os.makedirs(d, exist_ok=True)
-    with open(os.path.join(d, 'SKILL.md'), 'w') as f:
-        f.write(skill['content'])
-" 2>/dev/null
-      echo "Synced (teams: $teams). $skill_count skills."
-    else
-      echo "API unavailable."
-    fi
-    ;;
-  validate)
-    errors=0
-    test -f "$PLUGIN_ROOT/.claude-plugin/plugin.json" && echo "  [OK] plugin.json" || { echo "  [FAIL] plugin.json missing"; errors=$((errors+1)); }
-    test -f "$PLUGIN_ROOT/hooks/hooks.json" && echo "  [OK] hooks.json" || { echo "  [FAIL] hooks.json missing"; errors=$((errors+1)); }
-    test -x "$PLUGIN_ROOT/bin/oc" && echo "  [OK] bin/oc executable" || { echo "  [FAIL] bin/oc not executable"; errors=$((errors+1)); }
-    echo "Validation: $errors error(s)"
-    exit $errors
-    ;;
-  help|*)
-    echo "oc — Org Context CLI"
-    echo ""
-    echo "Commands:"
-    echo "  whoami     Show current user and role"
-    echo "  status     Show plugin status"
-    echo "  sync       Force re-sync content"
-    echo "  validate   Run installation checks"
-    echo "  help       Show this help"
-    ;;
-esac
+async function api(method, path, body) {
+  if (!API_KEY) die('No API key. Configure your API key in the plugin settings.')
+  const opts = {
+    method,
+    headers: { 'x-api-key': API_KEY, 'Content-Type': 'application/json' },
+    signal: AbortSignal.timeout(10000),
+  }
+  if (body) opts.body = JSON.stringify(body)
+  const res = await fetch(`${API_URL}${path}`, opts)
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    die(`${res.status} — ${err.error || err.message || 'Request failed'}`)
+  }
+  return res.json()
+}
+
+function out(data) {
+  if (JSON_OUTPUT) return console.log(JSON.stringify(data, null, 2))
+  return data
+}
+
+function timeAgo(dateStr) {
+  if (!dateStr) return '—'
+  const diff = Date.now() - new Date(dateStr).getTime()
+  const h = Math.floor(diff / 3600000)
+  if (h < 1) return 'just now'
+  if (h < 24) return `${h}h ago`
+  const d = Math.floor(h / 24)
+  if (d < 7) return `${d}d ago`
+  return `${Math.floor(d / 7)}w ago`
+}
+
+function readContent(flags) {
+  if (flags.file) return readFileSync(flags.file, 'utf8')
+  if (flags.content) return flags.content
+  return null
+}
+
+function parseTags(flags) {
+  return flags.tags ? flags.tags.split(',').map(t => t.trim()) : undefined
+}
+
+function parseTeams(flags) {
+  return flags.teams ? flags.teams.split(',').map(t => t.trim()) : undefined
+}
+
+// --- Commands ---
+
+const commands = {}
+
+// whoami
+commands.whoami = async () => {
+  const data = await api('GET', '/me')
+  if (JSON_OUTPUT) return out(data)
+  console.log(`${bold('Email:')}  ${data.user.email}`)
+  console.log(`${bold('Name:')}   ${data.user.name || dim('—')}`)
+  console.log(`${bold('ID:')}     ${dim(data.user.id)}`)
+}
+
+// sync
+commands.sync = async () => {
+  const data = await api('GET', '/sync')
+  if (JSON_OUTPUT) return out(data)
+  console.log(`${green('✓')} Synced for ${bold(data.email)}`)
+  console.log(`  Teams:  ${data.teams.length ? data.teams.join(', ') : dim('none')}`)
+  console.log(`  Skills: ${data.skills.length}`)
+  console.log(`  Rules:  ${data.rules.length}`)
+  console.log(`  MCPs:   ${Object.keys(data.mcpServers || {}).length}`)
+}
+
+// --- CRUD helpers ---
+
+function registerCrud(domain, { plural, nameField, hasDescription, hasSearch }) {
+  const p = plural || domain
+
+  commands[`${domain} list`] = async () => {
+    const items = await api('GET', `/${p}`)
+    if (JSON_OUTPUT) return out(items)
+    if (items.length === 0) return console.log(dim(`No ${p}.`))
+    const maxName = Math.max(...items.map(i => (i[nameField] || '').length), nameField.length)
+    console.log(`${bold(nameField.padEnd(maxName))}  ${bold('tags'.padEnd(20))}  ${bold('updated')}`)
+    for (const i of items) {
+      const name = (i[nameField] || '—').padEnd(maxName)
+      const tags = ((i.tags || []).join(', ') || '—').padEnd(20)
+      console.log(`${name}  ${dim(tags)}  ${dim(timeAgo(i.updatedAt))}`)
+    }
+    console.log(dim(`\n${items.length} ${p}`))
+  }
+
+  commands[`${domain} get`] = async (args) => {
+    const { positional } = parseFlags(args)
+    if (!positional[0]) die(`Usage: oc ${domain} get <id>`)
+    const item = await api('GET', `/${p}/${positional[0]}`)
+    if (JSON_OUTPUT) return out(item)
+    console.log(bold(item[nameField]))
+    if (hasDescription && item.description) console.log(dim(item.description))
+    console.log(`${dim('ID:')} ${item.id}`)
+    console.log(`${dim('Tags:')} ${(item.tags || []).join(', ') || '—'}`)
+    console.log(`${dim('Teams:')} ${(item.teams || []).map(t => t.name).join(', ') || '—'}`)
+    console.log(`${dim('Org-wide:')} ${item.orgWide ? 'yes' : 'no'}`)
+    console.log(`${dim('Updated:')} ${timeAgo(item.updatedAt)}`)
+    console.log('')
+    console.log(item.content)
+  }
+
+  commands[`${domain} create`] = async (args) => {
+    const { positional, flags } = parseFlags(args)
+    const name = positional[0]
+    if (!name) die(`Usage: oc ${domain} create <${nameField}> --file <path> [--tags a,b] [--teams id1,id2] [--org-wide]`)
+    const content = readContent(flags)
+    if (!content) die('Content required. Use --file <path> or --content "..."')
+    const body = {
+      [nameField]: name,
+      content,
+      tags: parseTags(flags) || [],
+      teamIds: parseTeams(flags) || [],
+      orgWide: 'org-wide' in flags,
+    }
+    if (hasDescription && flags.description) body.description = flags.description
+    const item = await api('POST', `/${p}`, body)
+    if (JSON_OUTPUT) return out(item)
+    console.log(`${green('✓')} Created ${domain}: ${bold(item[nameField])} ${dim(item.id)}`)
+  }
+
+  commands[`${domain} update`] = async (args) => {
+    const { positional, flags } = parseFlags(args)
+    const id = positional[0]
+    if (!id) die(`Usage: oc ${domain} update <id> [--${nameField} "new name"] [--file <path>] [--tags a,b]`)
+    const body = {}
+    if (flags[nameField]) body[nameField] = flags[nameField]
+    const content = readContent(flags)
+    if (content) body.content = content
+    if (flags.tags) body.tags = parseTags(flags)
+    if (flags.teams) body.teamIds = parseTeams(flags)
+    if ('org-wide' in flags) body.orgWide = true
+    if ('no-org-wide' in flags) body.orgWide = false
+    if (hasDescription && flags.description) body.description = flags.description
+    const item = await api('PUT', `/${p}/${id}`, body)
+    if (JSON_OUTPUT) return out(item)
+    console.log(`${green('✓')} Updated ${domain}: ${bold(item[nameField])} ${dim(item.id)}`)
+  }
+
+  commands[`${domain} delete`] = async (args) => {
+    const { positional } = parseFlags(args)
+    const id = positional[0]
+    if (!id) die(`Usage: oc ${domain} delete <id>`)
+    await api('DELETE', `/${p}/${id}`)
+    if (JSON_OUTPUT) return out({ success: true })
+    console.log(`${green('✓')} Deleted ${domain} ${dim(id)}`)
+  }
+
+  if (hasSearch) {
+    commands[`${domain} search`] = async (args) => {
+      const { positional, flags } = parseFlags(args)
+      const query = positional.join(' ')
+      const tag = flags.tag
+      if (!query && !tag) die(`Usage: oc ${domain} search <query> [--tag <tag>]`)
+      const params = new URLSearchParams()
+      if (query) params.set('q', query)
+      if (tag) params.set('tag', tag)
+      const items = await api('GET', `/${p}/search?${params}`)
+      if (JSON_OUTPUT) return out(items)
+      if (items.length === 0) return console.log(dim('No results.'))
+      for (const i of items) {
+        console.log(`${bold(i[nameField])} ${dim(i.id)}`)
+        if (i.description) console.log(`  ${dim(i.description)}`)
+      }
+      console.log(dim(`\n${items.length} results`))
+    }
+  }
+}
+
+registerCrud('skill', { plural: 'skills', nameField: 'name', hasDescription: true })
+registerCrud('rule', { plural: 'rules', nameField: 'name' })
+registerCrud('doc', { plural: 'docs', nameField: 'title', hasDescription: true, hasSearch: true })
+
+// --- Teams ---
+
+commands['teams list'] = async () => {
+  const items = await api('GET', '/teams')
+  if (JSON_OUTPUT) return out(items)
+  if (items.length === 0) return console.log(dim('No teams.'))
+  console.log(`${bold('name'.padEnd(25))}  ${bold('members')}  ${bold('skills')}  ${bold('rules')}  ${bold('docs')}`)
+  for (const t of items) {
+    console.log(
+      `${t.name.padEnd(25)}  ${String(t.memberCount || 0).padEnd(7)}  ${String(t.skillCount || 0).padEnd(6)}  ${String(t.ruleCount || 0).padEnd(5)}  ${t.docCount || 0}`
+    )
+  }
+  console.log(dim(`\n${items.length} teams`))
+}
+
+commands['teams get'] = async (args) => {
+  const { positional } = parseFlags(args)
+  if (!positional[0]) die('Usage: oc teams get <id>')
+  const team = await api('GET', `/teams/${positional[0]}`)
+  if (JSON_OUTPUT) return out(team)
+  console.log(bold(team.name))
+  console.log(`${dim('ID:')} ${team.id}`)
+  if (team.members?.length) {
+    console.log(`\n${bold('Members:')}`)
+    for (const m of team.members) console.log(`  ${m.user?.email || m.userId}`)
+  }
+}
+
+commands['teams create'] = async (args) => {
+  const { positional } = parseFlags(args)
+  if (!positional[0]) die('Usage: oc teams create <name>')
+  const team = await api('POST', '/teams', { name: positional[0] })
+  if (JSON_OUTPUT) return out(team)
+  console.log(`${green('✓')} Created team: ${bold(team.name)} ${dim(team.id)}`)
+}
+
+commands['teams delete'] = async (args) => {
+  const { positional } = parseFlags(args)
+  if (!positional[0]) die('Usage: oc teams delete <id>')
+  await api('DELETE', `/teams/${positional[0]}`)
+  if (JSON_OUTPUT) return out({ success: true })
+  console.log(`${green('✓')} Deleted team ${dim(positional[0])}`)
+}
+
+commands['teams add-member'] = async (args) => {
+  const { positional } = parseFlags(args)
+  if (!positional[0] || !positional[1]) die('Usage: oc teams add-member <teamId> <userId>')
+  await api('POST', `/teams/${positional[0]}/members`, { userId: positional[1] })
+  if (JSON_OUTPUT) return out({ success: true })
+  console.log(`${green('✓')} Added member ${dim(positional[1])} to team ${dim(positional[0])}`)
+}
+
+commands['teams rm-member'] = async (args) => {
+  const { positional } = parseFlags(args)
+  if (!positional[0] || !positional[1]) die('Usage: oc teams rm-member <teamId> <userId>')
+  await api('DELETE', `/teams/${positional[0]}/members/${positional[1]}`)
+  if (JSON_OUTPUT) return out({ success: true })
+  console.log(`${green('✓')} Removed member ${dim(positional[1])} from team ${dim(positional[0])}`)
+}
+
+// --- Members ---
+
+commands['members list'] = async () => {
+  const items = await api('GET', '/members')
+  if (JSON_OUTPUT) return out(items)
+  if (items.length === 0) return console.log(dim('No members.'))
+  const maxEmail = Math.max(...items.map(i => (i.email || '').length), 5)
+  console.log(`${bold('email'.padEnd(maxEmail))}  ${bold('name'.padEnd(20))}  ${bold('role'.padEnd(10))}  ${bold('teams')}`)
+  for (const m of items) {
+    const teams = (m.teams || []).map(t => t.name).join(', ') || '—'
+    console.log(`${(m.email || '—').padEnd(maxEmail)}  ${(m.name || '—').padEnd(20)}  ${(m.role || '—').padEnd(10)}  ${dim(teams)}`)
+  }
+  console.log(dim(`\n${items.length} members`))
+}
+
+commands['members invite'] = async (args) => {
+  const { positional, flags } = parseFlags(args)
+  if (!positional[0]) die('Usage: oc members invite <email> [--role member|admin] [--team <teamId>]')
+  const body = { email: positional[0], role: flags.role || 'member' }
+  if (flags.team) body.teamId = flags.team
+  await api('POST', '/members/invite', body)
+  if (JSON_OUTPUT) return out({ success: true })
+  console.log(`${green('✓')} Invited ${bold(positional[0])}`)
+}
+
+commands['members set-role'] = async (args) => {
+  const { positional } = parseFlags(args)
+  if (!positional[0] || !positional[1]) die('Usage: oc members set-role <memberId> <role>')
+  await api('PUT', `/members/${positional[0]}/role`, { role: positional[1] })
+  if (JSON_OUTPUT) return out({ success: true })
+  console.log(`${green('✓')} Set role to ${bold(positional[1])} for member ${dim(positional[0])}`)
+}
+
+commands['members remove'] = async (args) => {
+  const { positional } = parseFlags(args)
+  if (!positional[0]) die('Usage: oc members remove <memberId>')
+  await api('DELETE', `/members/${positional[0]}`)
+  if (JSON_OUTPUT) return out({ success: true })
+  console.log(`${green('✓')} Removed member ${dim(positional[0])}`)
+}
+
+// --- Help ---
+
+commands.help = async () => {
+  console.log(`${bold('oc')} — Org Context CLI\n`)
+  console.log('Usage: oc <command> [args] [--json]\n')
+  console.log(bold('General:'))
+  console.log('  whoami                          Show current user')
+  console.log('  sync                            Show sync status')
+  console.log('')
+  console.log(bold('Content:'))
+  console.log('  skill  list|get|create|update|delete')
+  console.log('  rule   list|get|create|update|delete')
+  console.log('  doc    list|get|create|update|delete|search')
+  console.log('')
+  console.log(bold('Organization:'))
+  console.log('  teams   list|get|create|delete|add-member|rm-member')
+  console.log('  members list|invite|set-role|remove')
+  console.log('')
+  console.log(dim('Use --json for machine-readable output.'))
+  console.log(dim('Use --file <path> to provide content for create/update.'))
+}
+
+// --- Dispatch ---
+
+async function main() {
+  const args = process.argv.slice(2).filter(a => a !== '--json')
+  if (args.length === 0) return commands.help()
+
+  const domain = args[0]
+  const action = args[1]
+  const rest = args.slice(2)
+
+  // Single-word commands
+  if (commands[domain] && typeof commands[domain] === 'function' && !action) {
+    return commands[domain](rest)
+  }
+
+  // Two-word commands (domain + action)
+  const key = `${domain} ${action}`
+  if (commands[key]) {
+    return commands[key](rest)
+  }
+
+  // Domain exists but no action
+  if (Object.keys(commands).some(k => k.startsWith(domain + ' '))) {
+    const actions = Object.keys(commands)
+      .filter(k => k.startsWith(domain + ' '))
+      .map(k => k.split(' ')[1])
+    console.log(`Usage: oc ${domain} <${actions.join('|')}>`)
+    return
+  }
+
+  die(`Unknown command: ${args.join(' ')}. Run 'oc help' for usage.`)
+}
+
+main().catch(err => {
+  if (err.name === 'AbortError') die('Request timed out')
+  die(err.message)
+})
