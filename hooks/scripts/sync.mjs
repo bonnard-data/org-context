@@ -58,8 +58,14 @@ try {
     ? join(projectDir, '.claude', 'rules')
     : join(HOME, '.claude', 'rules')
   mkdirSync(rulesDir, { recursive: true })
+  // Clean old oc- prefixed rules before writing new ones
+  try {
+    for (const f of readdirSync(rulesDir)) {
+      if (f.startsWith('oc-') && f.endsWith('.md')) rmSync(join(rulesDir, f), { force: true })
+    }
+  } catch {}
   for (const rule of data.rules || []) {
-    writeFileSync(join(rulesDir, `${safeName(rule.name)}.md`), rule.content)
+    writeFileSync(join(rulesDir, `oc-${safeName(rule.name)}.md`), rule.content)
   }
 
   // Write CLI tools to bin/
