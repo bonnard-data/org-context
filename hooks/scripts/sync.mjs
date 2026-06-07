@@ -141,10 +141,11 @@ function setupStatusLine(projectDir) {
       userCommand = globalSettings?.statusLine?.command || ''
     } catch {}
 
-    // Write wrapper script that runs user's command + appends alert badge
+    // Write wrapper script that runs user's command + appends smart alert badge
     const wrapperPath = join(PLUGIN_DATA, 'statusline-wrapper.sh')
+    const watermarkPath = join(PLUGIN_DATA, 'statusline-watermark')
     const wrapperScript = `#!/bin/bash
-# Org Context statusLine wrapper — runs user's statusLine + appends alert count
+# Org Context statusLine wrapper — user's statusLine + severity-aware alert badge
 input=$(cat)
 
 # Run user's original statusLine (if any)
@@ -158,13 +159,79 @@ else
   printf "\\033[2m%s | %s\\033[0m" "$dir" "$model"
 fi`}
 
-# Append alert count (second line)
+# Smart alert badge (second line)
 TOKEN="${SYNC_TOKEN}"
 API="${API_URL}"
+WATERMARK="${watermarkPath}"
+
 if [ -n "$TOKEN" ]; then
-  count=$(curl -sf -m 2 -H "Authorization: Bearer $TOKEN" "$API/alerts/count" 2>/dev/null | jq -r '.count // 0')
-  if [ "$count" -gt 0 ] 2>/dev/null; then
-    printf "\\n\\033[33m🔔 %s alert%s\\033[0m" "$count" "$([ "$count" -gt 1 ] && echo 's' || echo '')"
+  data=$(curl -sf -m 2 -H "Authorization: Bearer $TOKEN" "$API/alerts/count" 2>/dev/null)
+  if [ -n "$data" ]; then
+    count=$(echo "$data" | jq -r '.count // 0')
+    if [ "$count" -gt 0 ] 2>/dev/null; then
+      crit=$(echo "$data" | jq -r '.severities.critical // 0')
+      high=$(echo "$data" | jq -r '.severities.high // 0')
+      med=$(echo "$data" | jq -r '.severities.medium // 0')
+      info=$(echo "$data" | jq -r '.severities.info // 0')
+      newest=$(echo "$data" | jq -r '.newest // ""')
+      oldest=$(echo "$data" | jq -r '.oldest // ""')
+
+      # Check for new alerts since last watermark
+      last_seen=""
+      [ -f "$WATERMARK" ] && last_seen=$(cat "$WATERMARK" 2>/dev/null)
+      new_flag=""
+      if [ -n "$newest" ] && [ -n "$last_seen" ]; then
+        if [ "$newest" \\> "$last_seen" ]; then
+          new_flag=" ⚡NEW"
+        fi
+      elif [ -z "$last_seen" ] && [ -n "$newest" ]; then
+        new_flag=" ⚡NEW"
+      fi
+      # Update watermark
+      [ -n "$newest" ] && echo "$newest" > "$WATERMARK"
+
+      # Calculate age of oldest alert
+      age=""
+      if [ -n "$oldest" ]; then
+        now=$(date +%s)
+        then=$(date -j -f "%Y-%m-%dT%H:%M:%S" "$(echo "$oldest" | cut -d. -f1)" +%s 2>/dev/null || echo "")
+        if [ -n "$then" ]; then
+          diff=$((now - then))
+          if [ $diff -lt 60 ]; then age="<1m"
+          elif [ $diff -lt 3600 ]; then age="$((diff/60))m"
+          elif [ $diff -lt 86400 ]; then age="$((diff/3600))h"
+          else age="$((diff/86400))d"
+          fi
+        fi
+      fi
+
+      # Build severity segments
+      parts=""
+      [ "$crit" -gt 0 ] 2>/dev/null && parts="\\033[31m🚨 $crit crit\\033[0m"
+      if [ "$high" -gt 0 ] 2>/dev/null; then
+        [ -n "$parts" ] && parts="$parts \\033[2m·\\033[0m "
+        parts="$parts\\033[33m🔶 $high high\\033[0m"
+      fi
+      rest=$((med + info))
+      if [ "$rest" -gt 0 ] 2>/dev/null; then
+        [ -n "$parts" ] && parts="$parts \\033[2m·\\033[0m "
+        parts="$parts\\033[2m🔔 $rest more\\033[0m"
+      fi
+      # If no severity breakdown, just show count
+      if [ -z "$parts" ]; then
+        parts="\\033[33m🔔 $count alert$([ "$count" -gt 1 ] && echo 's')\\033[0m"
+      fi
+
+      # Add age of oldest if stale (>1h)
+      age_suffix=""
+      if [ -n "$age" ]; then
+        case "$age" in
+          *h|*d) age_suffix=" \\033[2m(oldest: $age)\\033[0m" ;;
+        esac
+      fi
+
+      printf "\\n%b%b%b" "$parts" "\\033[36m$new_flag\\033[0m" "$age_suffix"
+    fi
   fi
 fi
 `
