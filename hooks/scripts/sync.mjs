@@ -248,6 +248,7 @@ fi
     localSettings.statusLine = {
       type: 'command',
       command: `bash "${wrapperPath}"`,
+      refreshInterval: 60,
     }
 
     mkdirSync(join(projectDir, '.claude'), { recursive: true })
