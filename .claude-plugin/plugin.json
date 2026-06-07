@@ -20,7 +20,9 @@
     "org-context": {
       "type": "http",
       "url": "http://localhost:3000/mcp",
-      "oauth": {}
+      "headers": {
+        "Authorization": "Bearer ${CLAUDE_PLUGIN_OPTION_SYNCTOKEN}"
+      }
     }
   }
 }
