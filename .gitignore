@@ -1,4 +1,3 @@
 node_modules/
-.mcp.json
 skills/*/
 !skills/.gitkeep

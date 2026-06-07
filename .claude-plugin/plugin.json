@@ -15,5 +15,6 @@
       "sensitive": false,
       "required": true
     }
-  }
+  },
+  "mcpServers": "./.mcp.json"
 }
