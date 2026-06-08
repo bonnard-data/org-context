@@ -207,7 +207,7 @@ Flags: \`--json\` for machine-readable output, \`--file <path>\` for content, \`
   console.log(`  Skills: ${data.skills.length} (written to ${dim(skillsDir)})`)
   console.log(`  Rules:  ${data.rules.length} (written to ${dim(rulesDir)})`)
   console.log(`  MCPs:   ${Object.keys(data.mcpServers || {}).length}`)
-  console.log(dim('\nRun /reload-skills to pick up changes in autocomplete.'))
+  console.log(dim('\nRun /reload-plugins to pick up changes in autocomplete.'))
 }
 
 // --- CRUD helpers ---

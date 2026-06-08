@@ -11,4 +11,4 @@ Run the sync command and report the results:
 
 After reporting the results, tell the user:
 
-> Run `/reload-skills` to pick up any new or removed skills in autocomplete.
+> Run `/reload-plugins` to pick up any new or removed skills in autocomplete.

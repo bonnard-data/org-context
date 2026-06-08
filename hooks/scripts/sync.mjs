@@ -160,7 +160,7 @@ Flags: \`--json\` for machine-readable output, \`--file <path>\` for content, \`
   const output = {
     hookSpecificOutput: {
       hookEventName: 'SessionStart',
-      reloadSkills: true,
+      reloadSkills: true, reloadMcpServers: true,
       additionalContext: `[Org Context] Synced for ${data.email} (teams: ${(data.teams || []).join(', ') || 'none'}). ${(data.skills || []).length} skills, ${(data.rules || []).length} rules, ${cliCount} CLI tools, ${mcpCount} MCPs.
 
 Available skills: ${skillList}
