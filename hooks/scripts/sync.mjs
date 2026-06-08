@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { mkdirSync, writeFileSync, readdirSync, rmSync, readFileSync, chmodSync, appendFileSync } from 'node:fs'
+import { mkdirSync, writeFileSync, readdirSync, rmSync, readFileSync, chmodSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { homedir } from 'node:os'
@@ -24,17 +24,6 @@ if (!API_KEY) {
   }
   process.stdout.write(JSON.stringify(output))
   process.exit(0)
-}
-
-// Export env vars to all Bash tool calls for this session
-const envFile = process.env.CLAUDE_ENV_FILE
-process.stderr.write(`[oc-debug] CLAUDE_ENV_FILE=${envFile || 'NOT SET'}\n`)
-if (envFile) {
-  appendFileSync(envFile, `export CLAUDE_PLUGIN_OPTION_APIKEY="${API_KEY}"\n`)
-  appendFileSync(envFile, `export ORG_CONTEXT_API="${API_URL}"\n`)
-  if (process.env.CLAUDE_PROJECT_DIR) {
-    appendFileSync(envFile, `export CLAUDE_PROJECT_DIR="${process.env.CLAUDE_PROJECT_DIR}"\n`)
-  }
 }
 
 try {

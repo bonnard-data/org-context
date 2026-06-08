@@ -4,7 +4,15 @@ const { readFileSync, mkdirSync, writeFileSync, readdirSync, rmSync } = require(
 const { join, dirname } = require('node:path')
 const { homedir } = require('node:os')
 
-const API_KEY = process.env.CLAUDE_PLUGIN_OPTION_APIKEY || ''
+function loadApiKey() {
+  if (process.env.CLAUDE_PLUGIN_OPTION_APIKEY) return process.env.CLAUDE_PLUGIN_OPTION_APIKEY
+  try {
+    const settings = JSON.parse(readFileSync(join(homedir(), '.claude', 'settings.json'), 'utf8'))
+    return settings.pluginConfigs?.['org-context@bonnard-org-context']?.options?.apiKey || ''
+  } catch { return '' }
+}
+
+const API_KEY = loadApiKey()
 const API_URL = process.env.ORG_CONTEXT_API || 'https://api-production-746a.up.railway.app/api'
 const JSON_OUTPUT = process.argv.includes('--json')
 
