@@ -123,10 +123,19 @@ function registerCrud(domain, { plural, nameField, hasDescription, hasSearch }) 
     console.log(dim(`\n${items.length} ${p}`))
   }
 
+  async function resolveId(identifier) {
+    if (identifier.match(/^[0-9a-f]{8}-/)) return identifier
+    const items = await api('GET', `/${p}`)
+    const match = items.find(i => i[nameField] === identifier || i[nameField]?.toLowerCase() === identifier.toLowerCase())
+    if (!match) die(`No ${domain} found matching "${identifier}"`)
+    return match.id
+  }
+
   commands[`${domain} get`] = async (args) => {
     const { positional } = parseFlags(args)
-    if (!positional[0]) die(`Usage: oc ${domain} get <id>`)
-    const item = await api('GET', `/${p}/${positional[0]}`)
+    if (!positional[0]) die(`Usage: oc ${domain} get <name or id>`)
+    const id = await resolveId(positional.join(' '))
+    const item = await api('GET', `/${p}/${id}`)
     if (JSON_OUTPUT) return out(item)
     console.log(bold(item[nameField]))
     if (hasDescription && item.description) console.log(dim(item.description))
@@ -160,8 +169,8 @@ function registerCrud(domain, { plural, nameField, hasDescription, hasSearch }) 
 
   commands[`${domain} update`] = async (args) => {
     const { positional, flags } = parseFlags(args)
-    const id = positional[0]
-    if (!id) die(`Usage: oc ${domain} update <id> [--${nameField} "new name"] [--file <path>] [--tags a,b]`)
+    if (!positional[0]) die(`Usage: oc ${domain} update <name or id> [--${nameField} "new name"] [--file <path>] [--tags a,b]`)
+    const id = await resolveId(positional.join(' '))
     const body = {}
     if (flags[nameField]) body[nameField] = flags[nameField]
     const content = readContent(flags)
@@ -178,8 +187,8 @@ function registerCrud(domain, { plural, nameField, hasDescription, hasSearch }) 
 
   commands[`${domain} delete`] = async (args) => {
     const { positional } = parseFlags(args)
-    const id = positional[0]
-    if (!id) die(`Usage: oc ${domain} delete <id>`)
+    if (!positional[0]) die(`Usage: oc ${domain} delete <name or id>`)
+    const id = await resolveId(positional.join(' '))
     await api('DELETE', `/${p}/${id}`)
     if (JSON_OUTPUT) return out({ success: true })
     console.log(`${green('✓')} Deleted ${domain} ${dim(id)}`)
