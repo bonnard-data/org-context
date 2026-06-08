@@ -220,7 +220,9 @@ Flags: \`--json\` for machine-readable output, \`--file <path>\` for content, \`
 
 // --- CRUD helpers ---
 
-function registerCrud(domain, { plural, nameField, hasDescription, hasSearch }) {
+const HELP = {}
+
+function registerCrud(domain, { plural, nameField, hasDescription }) {
   const p = plural || domain
 
   commands[`${domain} list`] = async () => {
@@ -323,30 +325,37 @@ function registerCrud(domain, { plural, nameField, hasDescription, hasSearch }) 
     console.log(`${green('✓')} Deleted ${domain} ${dim(id)}`)
   }
 
-  if (hasSearch) {
-    commands[`${domain} search`] = async (args) => {
-      const { positional, flags } = parseFlags(args)
-      const query = positional.join(' ')
-      const tag = flags.tag
-      if (!query && !tag) die(`Usage: oc ${domain} search <query> [--tag <tag>]`)
-      const params = new URLSearchParams()
-      if (query) params.set('q', query)
-      if (tag) params.set('tag', tag)
-      const items = await api('GET', `/${p}/search?${params}`)
-      if (JSON_OUTPUT) return out(items)
-      if (items.length === 0) return console.log(dim('No results.'))
-      for (const i of items) {
-        console.log(`${bold(i[nameField])} ${dim(i.id)}`)
-        if (i.description) console.log(`  ${dim(i.description)}`)
-      }
-      console.log(dim(`\n${items.length} results`))
+  commands[`${domain} search`] = async (args) => {
+    const { positional, flags } = parseFlags(args)
+    const query = positional.join(' ')
+    const tag = flags.tag
+    if (!query && !tag) die(`Usage: oc ${domain} search <query> [--tag <tag>]`)
+    const params = new URLSearchParams()
+    if (query) params.set('q', query)
+    if (tag) params.set('tag', tag)
+    const items = await api('GET', `/${p}/search?${params}`)
+    if (JSON_OUTPUT) return out(items)
+    if (items.length === 0) return console.log(dim('No results.'))
+    for (const i of items) {
+      console.log(`${bold(i[nameField])} ${dim(i.id)}`)
+      if (i.description) console.log(`  ${dim(i.description)}`)
+      if (i.tags?.length) console.log(`  ${dim(i.tags.join(', '))}`)
     }
+    console.log(dim(`\n${items.length} results`))
   }
+
+  HELP[`${domain} list`] = `List all ${p}\n  Usage: oc ${domain} list [--json]`
+  HELP[`${domain} get`] = `Show a ${domain} by name or ID\n  Usage: oc ${domain} get <name or id> [--json]`
+  HELP[`${domain} create`] = `Create a new ${domain}\n  Usage: oc ${domain} create <${nameField}> --file <path> [--tags a,b] [--teams t1,t2] [--org-wide]${hasDescription ? ' [--description "..."]' : ''}`
+  HELP[`${domain} update`] = `Update an existing ${domain}\n  Usage: oc ${domain} update <name or id> [--file <path>] [--${nameField} "new"] [--tags a,b] [--teams t1,t2] [--org-wide] [--no-org-wide]`
+  HELP[`${domain} delete`] = `Delete a ${domain}\n  Usage: oc ${domain} delete <name or id>`
+  HELP[`${domain} search`] = `Search ${p} by text or tag\n  Usage: oc ${domain} search <query> [--tag <tag>]\n\n  Examples:\n    oc ${domain} search hono\n    oc ${domain} search --tag bonnard-stack`
+  HELP[`${domain} template`] = `Show example ${domain} content\n  Usage: oc ${domain} template`
 }
 
 registerCrud('skill', { plural: 'skills', nameField: 'name', hasDescription: true })
 registerCrud('rule', { plural: 'rules', nameField: 'name' })
-registerCrud('doc', { plural: 'docs', nameField: 'title', hasDescription: true, hasSearch: true })
+registerCrud('doc', { plural: 'docs', nameField: 'title', hasDescription: true })
 
 // --- Templates ---
 
@@ -555,16 +564,29 @@ commands['members remove'] = async (args) => {
 
 // --- Help ---
 
+HELP['teams list'] = 'List all teams with member/content counts\n  Usage: oc teams list [--json]'
+HELP['teams get'] = 'Show team details and members\n  Usage: oc teams get <name or id> [--json]'
+HELP['teams create'] = 'Create a new team\n  Usage: oc teams create <name>'
+HELP['teams delete'] = 'Delete a team\n  Usage: oc teams delete <name or id>'
+HELP['teams add-member'] = 'Add a member to a team\n  Usage: oc teams add-member <team-name> <email>'
+HELP['teams rm-member'] = 'Remove a member from a team\n  Usage: oc teams rm-member <team-name> <email>'
+HELP['members list'] = 'List all org members with teams and roles\n  Usage: oc members list [--json]'
+HELP['members invite'] = 'Invite a new member to the org\n  Usage: oc members invite <email> [--role member|admin] [--team <team-name>]'
+HELP['members set-role'] = 'Change a member\'s role\n  Usage: oc members set-role <email> <role>'
+HELP['members remove'] = 'Remove a member from the org\n  Usage: oc members remove <email>'
+HELP['whoami'] = 'Show current user identity and organization\n  Usage: oc whoami [--json]'
+HELP['sync'] = 'Re-sync skills, rules, and docs from the server\n  Usage: oc sync [--json]'
+
 commands.help = async () => {
   console.log(`${bold('oc')} — Org Context CLI\n`)
   console.log('Usage: oc <command> [args] [--json]\n')
   console.log(bold('General:'))
   console.log('  whoami                          Show current user')
-  console.log('  sync                            Show sync status')
+  console.log('  sync                            Re-sync content from server')
   console.log('')
   console.log(bold('Content:'))
-  console.log('  skill  list|get|create|update|delete|template')
-  console.log('  rule   list|get|create|update|delete|template')
+  console.log('  skill  list|get|create|update|delete|search|template')
+  console.log('  rule   list|get|create|update|delete|search|template')
   console.log('  doc    list|get|create|update|delete|search|template')
   console.log('')
   console.log(bold('Organization:'))
@@ -579,11 +601,27 @@ commands.help = async () => {
 
 async function main() {
   const args = process.argv.slice(2).filter(a => a !== '--json')
+  const hasHelp = process.argv.includes('--help') || process.argv.includes('-h')
   if (args.length === 0) return commands.help()
 
-  const domain = args[0]
-  const action = args[1]
-  const rest = args.slice(2)
+  const domain = args.filter(a => a !== '--help' && a !== '-h')[0]
+  const action = args.filter(a => a !== '--help' && a !== '-h')[1]
+  const rest = args.slice(2).filter(a => a !== '--help' && a !== '-h')
+
+  // --help for a specific command
+  if (hasHelp) {
+    const key = action ? `${domain} ${action}` : domain
+    if (HELP[key]) return console.log(`\n${bold('oc ' + key)}\n\n${HELP[key]}\n`)
+    if (Object.keys(HELP).some(k => k.startsWith(domain + ' '))) {
+      console.log(`\n${bold('oc ' + domain)}\n`)
+      Object.keys(HELP).filter(k => k.startsWith(domain + ' ')).forEach(k => {
+        console.log(`  ${bold(k.split(' ')[1].padEnd(12))} ${HELP[k].split('\n')[0]}`)
+      })
+      console.log('')
+      return
+    }
+    return commands.help()
+  }
 
   // Single-word commands
   if (commands[domain] && typeof commands[domain] === 'function' && !action) {
