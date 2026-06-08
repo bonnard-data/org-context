@@ -31,6 +31,9 @@ const envFile = process.env.CLAUDE_ENV_FILE
 if (envFile) {
   appendFileSync(envFile, `export CLAUDE_PLUGIN_OPTION_APIKEY="${API_KEY}"\n`)
   appendFileSync(envFile, `export ORG_CONTEXT_API="${API_URL}"\n`)
+  if (process.env.CLAUDE_PROJECT_DIR) {
+    appendFileSync(envFile, `export CLAUDE_PROJECT_DIR="${process.env.CLAUDE_PROJECT_DIR}"\n`)
+  }
 }
 
 try {

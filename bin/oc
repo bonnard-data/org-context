@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 
-const { readFileSync } = require('node:fs')
+const { readFileSync, mkdirSync, writeFileSync, readdirSync, rmSync } = require('node:fs')
+const { join, dirname } = require('node:path')
+const { homedir } = require('node:os')
 
 const API_KEY = process.env.CLAUDE_PLUGIN_OPTION_APIKEY || ''
 const API_URL = process.env.ORG_CONTEXT_API || 'http://localhost:3000/api'
@@ -76,8 +78,14 @@ function parseTags(flags) {
   return flags.tags ? flags.tags.split(',').map(t => t.trim()) : undefined
 }
 
-function parseTeams(flags) {
-  return flags.teams ? flags.teams.split(',').map(t => t.trim()) : undefined
+async function parseTeamIds(flags) {
+  if (!flags.teams) return undefined
+  const names = flags.teams.split(',').map(t => t.trim())
+  const ids = []
+  for (const name of names) {
+    ids.push(await resolveTeamId(name))
+  }
+  return ids
 }
 
 // --- Commands ---
@@ -93,15 +101,113 @@ commands.whoami = async () => {
   console.log(`${bold('ID:')}     ${dim(data.user.id)}`)
 }
 
-// sync
+// sync — full file-writing sync (same as SessionStart hook)
 commands.sync = async () => {
   const data = await api('GET', '/sync')
+
+  const PLUGIN_ROOT = join(dirname(__filename), '..')
+  const HOME = process.env.HOME || homedir()
+  const projectDir = process.env.CLAUDE_PROJECT_DIR
+
+  function safeName(name) {
+    return name.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 100)
+  }
+
+  // Write skills
+  const skillsDir = join(PLUGIN_ROOT, 'skills')
+  mkdirSync(skillsDir, { recursive: true })
+  try {
+    for (const d of readdirSync(skillsDir, { withFileTypes: true })) {
+      if (d.isDirectory()) rmSync(join(skillsDir, d.name), { recursive: true, force: true })
+    }
+  } catch {}
+  for (const skill of data.skills || []) {
+    const name = safeName(skill.name)
+    const dir = join(skillsDir, name)
+    mkdirSync(dir, { recursive: true })
+    writeFileSync(join(dir, 'SKILL.md'), skill.content)
+  }
+
+  // Write rules
+  const rulesDir = projectDir
+    ? join(projectDir, '.claude', 'rules')
+    : join(HOME, '.claude', 'rules')
+  mkdirSync(rulesDir, { recursive: true })
+  try {
+    for (const f of readdirSync(rulesDir)) {
+      if (f.startsWith('oc-') && f.endsWith('.md')) rmSync(join(rulesDir, f), { force: true })
+    }
+  } catch {}
+  for (const rule of data.rules || []) {
+    writeFileSync(join(rulesDir, `oc-${safeName(rule.name)}.md`), rule.content)
+  }
+
+  // Write agent guide
+  const skillNames = (data.skills || []).map(s => s.name)
+  writeFileSync(join(rulesDir, 'oc-agent-guide.md'), `# Org Context
+
+You have the Org Context plugin installed. It provides your organization's knowledge, standards, and tools.
+
+## What you have
+
+- **Skills** (slash commands): ${skillNames.length ? skillNames.map(n => '/' + safeName(n)).join(', ') : 'none synced'}
+- **Rules** (always-on context): ${(data.rules || []).length} org rules loaded — follow them
+- **MCP tools**: Use \`search_docs\` to search company documentation, \`list_docs\` to browse available docs
+- **CLI** (\`oc\`): Admin tool for managing org content
+
+## CLI reference
+
+\`\`\`
+oc whoami                              # Current user info
+oc sync                                # Re-sync content from server
+
+oc skill list|get|create|update|delete # Manage skills
+oc rule  list|get|create|update|delete # Manage rules
+oc doc   list|get|create|update|delete|search # Manage docs
+
+oc skill template / oc rule template / oc doc template  # Show example content
+
+oc teams   list|get|create|delete|add-member|rm-member
+oc members list|invite|set-role|remove
+\`\`\`
+
+Flags: \`--json\` for machine-readable output, \`--file <path>\` for content, \`--tags a,b\`, \`--org-wide\`, \`--description "..."\`
+
+## Content types
+
+**Skills** — On-demand procedures invoked via slash command. Write as step-by-step instructions the agent should follow. Markdown with headers, lists, code blocks. One focused task per skill.
+
+**Rules** — Always-on context injected into every session. Keep short and directive: "Always...", "Never...", "Prefer...". Plain markdown, no frontmatter.
+
+**Docs** — Searchable knowledge (architecture, schemas, runbooks). Title and description are separate fields; content is just the body in markdown. Found via \`search_docs\` MCP tool.
+
+## When to use what
+
+- Need company knowledge? → \`search_docs\` MCP tool
+- Need to see what's available? → \`oc doc list\`, \`oc skill list\`
+- Need to create/edit content? → Write content to a temp file, then \`oc <type> create "Name" --file /tmp/content.md\`
+- User asks about their setup? → \`oc whoami\`, \`oc teams list\`
+- Need a content example? → \`oc skill template\`, \`oc rule template\`, \`oc doc template\`
+`)
+
+  // Write MCP config
+  const mcpServers = {
+    'org-context': {
+      type: 'http',
+      url: API_URL.replace('/api', '/mcp'),
+      headers: { 'x-api-key': API_KEY },
+    },
+    ...(data.mcpServers || {}),
+  }
+  writeFileSync(join(PLUGIN_ROOT, '.mcp.json'), JSON.stringify({ mcpServers }, null, 2))
+
   if (JSON_OUTPUT) return out(data)
   console.log(`${green('✓')} Synced for ${bold(data.email)}`)
   console.log(`  Teams:  ${data.teams.length ? data.teams.join(', ') : dim('none')}`)
-  console.log(`  Skills: ${data.skills.length}`)
-  console.log(`  Rules:  ${data.rules.length}`)
+  console.log(`  Skills: ${data.skills.length} (written to ${dim(skillsDir)})`)
+  console.log(`  Rules:  ${data.rules.length} (written to ${dim(rulesDir)})`)
   console.log(`  MCPs:   ${Object.keys(data.mcpServers || {}).length}`)
+  console.log(dim('\nRun /reload-skills to pick up changes in autocomplete.'))
 }
 
 // --- CRUD helpers ---
@@ -166,14 +272,14 @@ function registerCrud(domain, { plural, nameField, hasDescription, hasSearch }) 
   commands[`${domain} create`] = async (args) => {
     const { positional, flags } = parseFlags(args)
     const name = positional[0]
-    if (!name) die(`Usage: oc ${domain} create <${nameField}> --file <path> [--tags a,b] [--teams id1,id2] [--org-wide]`)
+    if (!name) die(`Usage: oc ${domain} create <${nameField}> --file <path> [--tags a,b] [--teams team1,team2] [--org-wide]`)
     const content = readContent(flags)
     if (!content) die('Content required. Use --file <path> or --content "..."')
     const body = {
       [nameField]: name,
       content,
       tags: parseTags(flags) || [],
-      teamIds: parseTeams(flags) || [],
+      teamIds: (await parseTeamIds(flags)) || [],
       orgWide: 'org-wide' in flags,
     }
     if (hasDescription && flags.description) body.description = flags.description
@@ -191,7 +297,7 @@ function registerCrud(domain, { plural, nameField, hasDescription, hasSearch }) 
     const content = readContent(flags)
     if (content) body.content = content
     if (flags.tags) body.tags = parseTags(flags)
-    if (flags.teams) body.teamIds = parseTeams(flags)
+    if (flags.teams) body.teamIds = await parseTeamIds(flags)
     if ('org-wide' in flags) body.orgWide = true
     if ('no-org-wide' in flags) body.orgWide = false
     if (hasDescription && flags.description) body.description = flags.description
