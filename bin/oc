@@ -114,11 +114,12 @@ function registerCrud(domain, { plural, nameField, hasDescription, hasSearch }) 
     if (JSON_OUTPUT) return out(items)
     if (items.length === 0) return console.log(dim(`No ${p}.`))
     const maxName = Math.max(...items.map(i => (i[nameField] || '').length), nameField.length)
-    console.log(`${bold(nameField.padEnd(maxName))}  ${bold('tags'.padEnd(20))}  ${bold('updated')}`)
+    console.log(`${bold('id'.padEnd(8))}  ${bold(nameField.padEnd(maxName))}  ${bold('tags'.padEnd(20))}  ${bold('updated')}`)
     for (const i of items) {
+      const id = (i.id || '').slice(0, 8)
       const name = (i[nameField] || '—').padEnd(maxName)
       const tags = ((i.tags || []).join(', ') || '—').padEnd(20)
-      console.log(`${name}  ${dim(tags)}  ${dim(timeAgo(i.updatedAt))}`)
+      console.log(`${dim(id)}  ${name}  ${dim(tags)}  ${dim(timeAgo(i.updatedAt))}`)
     }
     console.log(dim(`\n${items.length} ${p}`))
   }
@@ -126,9 +127,13 @@ function registerCrud(domain, { plural, nameField, hasDescription, hasSearch }) 
   async function resolveId(identifier) {
     if (identifier.match(/^[0-9a-f]{8}-/)) return identifier
     const items = await api('GET', `/${p}`)
-    const match = items.find(i => i[nameField] === identifier || i[nameField]?.toLowerCase() === identifier.toLowerCase())
-    if (!match) die(`No ${domain} found matching "${identifier}"`)
-    return match.id
+    const matches = items.filter(i => i[nameField]?.toLowerCase() === identifier.toLowerCase())
+    if (matches.length === 0) die(`No ${domain} found matching "${identifier}"`)
+    if (matches.length > 1) {
+      const list = matches.map(m => `  ${m.id}  ${m[nameField]}`).join('\n')
+      die(`Multiple ${p} match "${identifier}". Use the ID:\n${list}`)
+    }
+    return matches[0].id
   }
 
   commands[`${domain} get`] = async (args) => {
@@ -284,14 +289,41 @@ Title and description are separate fields — the content is just the body.`)
 
 // --- Teams ---
 
+async function resolveTeamId(identifier) {
+  if (identifier.match(/^[0-9a-f]{8}-/)) return identifier
+  const teams = await api('GET', '/teams')
+  const matches = teams.filter(t => t.name?.toLowerCase() === identifier.toLowerCase())
+  if (matches.length === 0) die(`No team found matching "${identifier}"`)
+  if (matches.length > 1) {
+    const list = matches.map(t => `  ${t.id}  ${t.name}`).join('\n')
+    die(`Multiple teams match "${identifier}". Use the ID:\n${list}`)
+  }
+  return matches[0].id
+}
+
+async function resolveUserIdByEmail(email) {
+  const members = await api('GET', '/members')
+  const match = members.find(m => m.email?.toLowerCase() === email.toLowerCase())
+  if (!match) die(`No member found with email "${email}"`)
+  return match.userId
+}
+
+async function resolveMemberIdByEmail(email) {
+  const members = await api('GET', '/members')
+  const match = members.find(m => m.email?.toLowerCase() === email.toLowerCase())
+  if (!match) die(`No member found with email "${email}"`)
+  return match.id
+}
+
 commands['teams list'] = async () => {
   const items = await api('GET', '/teams')
   if (JSON_OUTPUT) return out(items)
   if (items.length === 0) return console.log(dim('No teams.'))
-  console.log(`${bold('name'.padEnd(25))}  ${bold('members')}  ${bold('skills')}  ${bold('rules')}  ${bold('docs')}`)
+  console.log(`${bold('id'.padEnd(8))}  ${bold('name'.padEnd(25))}  ${bold('members')}  ${bold('skills')}  ${bold('rules')}  ${bold('docs')}`)
   for (const t of items) {
+    const id = (t.id || '').slice(0, 8)
     console.log(
-      `${t.name.padEnd(25)}  ${String(t.memberCount || 0).padEnd(7)}  ${String(t.skillCount || 0).padEnd(6)}  ${String(t.ruleCount || 0).padEnd(5)}  ${t.docCount || 0}`
+      `${dim(id)}  ${t.name.padEnd(25)}  ${String(t.memberCount || 0).padEnd(7)}  ${String(t.skillCount || 0).padEnd(6)}  ${String(t.ruleCount || 0).padEnd(5)}  ${t.docCount || 0}`
     )
   }
   console.log(dim(`\n${items.length} teams`))
@@ -299,8 +331,9 @@ commands['teams list'] = async () => {
 
 commands['teams get'] = async (args) => {
   const { positional } = parseFlags(args)
-  if (!positional[0]) die('Usage: oc teams get <id>')
-  const team = await api('GET', `/teams/${positional[0]}`)
+  if (!positional[0]) die('Usage: oc teams get <name or id>')
+  const id = await resolveTeamId(positional.join(' '))
+  const team = await api('GET', `/teams/${id}`)
   if (JSON_OUTPUT) return out(team)
   console.log(bold(team.name))
   console.log(`${dim('ID:')} ${team.id}`)
@@ -313,33 +346,38 @@ commands['teams get'] = async (args) => {
 commands['teams create'] = async (args) => {
   const { positional } = parseFlags(args)
   if (!positional[0]) die('Usage: oc teams create <name>')
-  const team = await api('POST', '/teams', { name: positional[0] })
+  const team = await api('POST', '/teams', { name: positional.join(' ') })
   if (JSON_OUTPUT) return out(team)
   console.log(`${green('✓')} Created team: ${bold(team.name)} ${dim(team.id)}`)
 }
 
 commands['teams delete'] = async (args) => {
   const { positional } = parseFlags(args)
-  if (!positional[0]) die('Usage: oc teams delete <id>')
-  await api('DELETE', `/teams/${positional[0]}`)
+  if (!positional[0]) die('Usage: oc teams delete <name or id>')
+  const id = await resolveTeamId(positional.join(' '))
+  await api('DELETE', `/teams/${id}`)
   if (JSON_OUTPUT) return out({ success: true })
-  console.log(`${green('✓')} Deleted team ${dim(positional[0])}`)
+  console.log(`${green('✓')} Deleted team ${dim(id)}`)
 }
 
 commands['teams add-member'] = async (args) => {
   const { positional } = parseFlags(args)
-  if (!positional[0] || !positional[1]) die('Usage: oc teams add-member <teamId> <userId>')
-  await api('POST', `/teams/${positional[0]}/members`, { userId: positional[1] })
+  if (!positional[0] || !positional[1]) die('Usage: oc teams add-member <team-name> <email>')
+  const teamId = await resolveTeamId(positional[0])
+  const userId = await resolveUserIdByEmail(positional[1])
+  await api('POST', `/teams/${teamId}/members`, { userId })
   if (JSON_OUTPUT) return out({ success: true })
-  console.log(`${green('✓')} Added member ${dim(positional[1])} to team ${dim(positional[0])}`)
+  console.log(`${green('✓')} Added ${bold(positional[1])} to team ${bold(positional[0])}`)
 }
 
 commands['teams rm-member'] = async (args) => {
   const { positional } = parseFlags(args)
-  if (!positional[0] || !positional[1]) die('Usage: oc teams rm-member <teamId> <userId>')
-  await api('DELETE', `/teams/${positional[0]}/members/${positional[1]}`)
+  if (!positional[0] || !positional[1]) die('Usage: oc teams rm-member <team-name> <email>')
+  const teamId = await resolveTeamId(positional[0])
+  const userId = await resolveUserIdByEmail(positional[1])
+  await api('DELETE', `/teams/${teamId}/members/${userId}`)
   if (JSON_OUTPUT) return out({ success: true })
-  console.log(`${green('✓')} Removed member ${dim(positional[1])} from team ${dim(positional[0])}`)
+  console.log(`${green('✓')} Removed ${bold(positional[1])} from team ${bold(positional[0])}`)
 }
 
 // --- Members ---
@@ -359,9 +397,11 @@ commands['members list'] = async () => {
 
 commands['members invite'] = async (args) => {
   const { positional, flags } = parseFlags(args)
-  if (!positional[0]) die('Usage: oc members invite <email> [--role member|admin] [--team <teamId>]')
+  if (!positional[0]) die('Usage: oc members invite <email> [--role member|admin] [--team <team-name>]')
   const body = { email: positional[0], role: flags.role || 'member' }
-  if (flags.team) body.teamId = flags.team
+  if (flags.team) {
+    body.teamId = await resolveTeamId(flags.team)
+  }
   await api('POST', '/members/invite', body)
   if (JSON_OUTPUT) return out({ success: true })
   console.log(`${green('✓')} Invited ${bold(positional[0])}`)
@@ -369,18 +409,20 @@ commands['members invite'] = async (args) => {
 
 commands['members set-role'] = async (args) => {
   const { positional } = parseFlags(args)
-  if (!positional[0] || !positional[1]) die('Usage: oc members set-role <memberId> <role>')
-  await api('PUT', `/members/${positional[0]}/role`, { role: positional[1] })
+  if (!positional[0] || !positional[1]) die('Usage: oc members set-role <email> <role>')
+  const memberId = await resolveMemberIdByEmail(positional[0])
+  await api('PUT', `/members/${memberId}/role`, { role: positional[1] })
   if (JSON_OUTPUT) return out({ success: true })
-  console.log(`${green('✓')} Set role to ${bold(positional[1])} for member ${dim(positional[0])}`)
+  console.log(`${green('✓')} Set role to ${bold(positional[1])} for ${bold(positional[0])}`)
 }
 
 commands['members remove'] = async (args) => {
   const { positional } = parseFlags(args)
-  if (!positional[0]) die('Usage: oc members remove <memberId>')
-  await api('DELETE', `/members/${positional[0]}`)
+  if (!positional[0]) die('Usage: oc members remove <email>')
+  const memberId = await resolveMemberIdByEmail(positional[0])
+  await api('DELETE', `/members/${memberId}`)
   if (JSON_OUTPUT) return out({ success: true })
-  console.log(`${green('✓')} Removed member ${dim(positional[0])}`)
+  console.log(`${green('✓')} Removed ${bold(positional[0])}`)
 }
 
 // --- Help ---
