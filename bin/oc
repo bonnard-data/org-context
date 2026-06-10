@@ -8,12 +8,14 @@ function loadApiKey() {
   if (process.env.CLAUDE_PLUGIN_OPTION_APIKEY) return process.env.CLAUDE_PLUGIN_OPTION_APIKEY
   try {
     const settings = JSON.parse(readFileSync(join(homedir(), '.claude', 'settings.json'), 'utf8'))
-    return settings.pluginConfigs?.['org-context@bonnard-org-context']?.options?.apiKey || ''
+    return settings.pluginConfigs?.['gerbil@bonnard']?.options?.apiKey
+      || settings.pluginConfigs?.['org-context@bonnard-org-context']?.options?.apiKey // legacy install id
+      || ''
   } catch { return '' }
 }
 
 const API_KEY = loadApiKey()
-const API_URL = process.env.ORG_CONTEXT_API || 'https://app.gerbil.dev/api'
+const API_URL = process.env.GERBIL_API || process.env.ORG_CONTEXT_API || 'https://app.gerbil.dev/api'
 const JSON_OUTPUT = process.argv.includes('--json')
 
 // ANSI colors
@@ -152,9 +154,9 @@ commands.sync = async () => {
 
   // Write agent guide
   const skillNames = (data.skills || []).map(s => s.name)
-  writeFileSync(join(rulesDir, 'oc-agent-guide.md'), `# Org Context
+  writeFileSync(join(rulesDir, 'oc-agent-guide.md'), `# Gerbil
 
-You have the Org Context plugin installed. It provides your organization's knowledge, standards, and tools.
+You have the Gerbil plugin installed. It provides your organization's knowledge, standards, and tools.
 
 ## What you have
 
@@ -200,7 +202,7 @@ Flags: \`--json\` for machine-readable output, \`--file <path>\` for content, \`
 
   // Write MCP config
   const mcpServers = {
-    'org-context': {
+    'gerbil': {
       type: 'http',
       url: API_URL.replace('/api', '/mcp'),
       headers: { 'x-api-key': API_KEY },
@@ -578,7 +580,7 @@ HELP['whoami'] = 'Show current user identity and organization\n  Usage: oc whoam
 HELP['sync'] = 'Re-sync skills, rules, and docs from the server\n  Usage: oc sync [--json]'
 
 commands.help = async () => {
-  console.log(`${bold('oc')} — Org Context CLI\n`)
+  console.log(`${bold('oc')}: the Gerbil CLI\n`)
   console.log('Usage: oc <command> [args] [--json]\n')
   console.log(bold('General:'))
   console.log('  whoami                          Show current user')

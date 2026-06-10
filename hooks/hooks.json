@@ -1,5 +1,5 @@
 {
-  "description": "Org Context — syncs team-specific content on session start",
+  "description": "Gerbil: syncs team-specific content on session start",
   "hooks": {
     "SessionStart": [
       {
