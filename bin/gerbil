@@ -143,16 +143,16 @@ commands.sync = async () => {
   mkdirSync(rulesDir, { recursive: true })
   try {
     for (const f of readdirSync(rulesDir)) {
-      if (f.startsWith('oc-') && f.endsWith('.md')) rmSync(join(rulesDir, f), { force: true })
+      if (f.startsWith('gerbil-') && f.endsWith('.md')) rmSync(join(rulesDir, f), { force: true })
     }
   } catch {}
   for (const rule of data.rules || []) {
-    writeFileSync(join(rulesDir, `oc-${safeName(rule.name)}.md`), rule.content)
+    writeFileSync(join(rulesDir, `gerbil-${safeName(rule.name)}.md`), rule.content)
   }
 
   // Write agent guide
   const skillNames = (data.skills || []).map(s => s.name)
-  writeFileSync(join(rulesDir, 'oc-agent-guide.md'), `# Gerbil
+  writeFileSync(join(rulesDir, 'gerbil-agent-guide.md'), `# Gerbil
 
 You have the Gerbil plugin installed. It provides your organization's knowledge, standards, and tools.
 
@@ -161,22 +161,22 @@ You have the Gerbil plugin installed. It provides your organization's knowledge,
 - **Skills** (slash commands): ${skillNames.length ? skillNames.map(n => '/' + safeName(n)).join(', ') : 'none synced'}
 - **Rules** (always-on context): ${(data.rules || []).length} org rules loaded — follow them
 - **MCP tools**: Use \`search_docs\` to search company documentation, \`list_docs\` to browse available docs
-- **CLI** (\`oc\`): Admin tool for managing org content
+- **CLI** (\`gerbil\`): Admin tool for managing org content
 
 ## CLI reference
 
 \`\`\`
-oc whoami                              # Current user info
-oc sync                                # Re-sync content from server
+gerbil whoami                              # Current user info
+gerbil sync                                # Re-sync content from server
 
-oc skill list|get|create|update|delete # Manage skills
-oc rule  list|get|create|update|delete # Manage rules
-oc doc   list|get|create|update|delete|search # Manage docs
+gerbil skill list|get|create|update|delete # Manage skills
+gerbil rule  list|get|create|update|delete # Manage rules
+gerbil doc   list|get|create|update|delete|search # Manage docs
 
-oc skill template / oc rule template / oc doc template  # Show example content
+gerbil skill template / gerbil rule template / gerbil doc template  # Show example content
 
-oc teams   list|get|create|delete|add-member|rm-member
-oc members list|invite|set-role|remove
+gerbil teams   list|get|create|delete|add-member|rm-member
+gerbil members list|invite|set-role|remove
 \`\`\`
 
 Flags: \`--json\` for machine-readable output, \`--file <path>\` for content, \`--tags a,b\`, \`--org-wide\`, \`--description "..."\`
@@ -192,10 +192,10 @@ Flags: \`--json\` for machine-readable output, \`--file <path>\` for content, \`
 ## When to use what
 
 - Need company knowledge? → \`search_docs\` MCP tool
-- Need to see what's available? → \`oc doc list\`, \`oc skill list\`
-- Need to create/edit content? → Write content to a temp file, then \`oc <type> create "Name" --file /tmp/content.md\`
-- User asks about their setup? → \`oc whoami\`, \`oc teams list\`
-- Need a content example? → \`oc skill template\`, \`oc rule template\`, \`oc doc template\`
+- Need to see what's available? → \`gerbil doc list\`, \`gerbil skill list\`
+- Need to create/edit content? → Write content to a temp file, then \`gerbil <type> create "Name" --file /tmp/content.md\`
+- User asks about their setup? → \`gerbil whoami\`, \`gerbil teams list\`
+- Need a content example? → \`gerbil skill template\`, \`gerbil rule template\`, \`gerbil doc template\`
 `)
 
   // Write MCP config
@@ -264,7 +264,7 @@ function registerCrud(domain, { plural, nameField, hasDescription }) {
 
   commands[`${domain} get`] = async (args) => {
     const { positional } = parseFlags(args)
-    if (!positional[0]) die(`Usage: oc ${domain} get <name or id>`)
+    if (!positional[0]) die(`Usage: gerbil ${domain} get <name or id>`)
     const id = await resolveId(positional.join(' '))
     const item = await api('GET', `/${p}/${id}`)
     if (JSON_OUTPUT) return out(item)
@@ -282,7 +282,7 @@ function registerCrud(domain, { plural, nameField, hasDescription }) {
   commands[`${domain} create`] = async (args) => {
     const { positional, flags } = parseFlags(args)
     const name = positional[0]
-    if (!name) die(`Usage: oc ${domain} create <${nameField}> --file <path> [--tags a,b] [--teams team1,team2] [--org-wide]`)
+    if (!name) die(`Usage: gerbil ${domain} create <${nameField}> --file <path> [--tags a,b] [--teams team1,team2] [--org-wide]`)
     const content = readContent(flags)
     if (!content) die('Content required. Use --file <path> or --content "..."')
     const body = {
@@ -300,7 +300,7 @@ function registerCrud(domain, { plural, nameField, hasDescription }) {
 
   commands[`${domain} update`] = async (args) => {
     const { positional, flags } = parseFlags(args)
-    if (!positional[0]) die(`Usage: oc ${domain} update <name or id> [--${nameField} "new name"] [--file <path>] [--tags a,b]`)
+    if (!positional[0]) die(`Usage: gerbil ${domain} update <name or id> [--${nameField} "new name"] [--file <path>] [--tags a,b]`)
     const id = await resolveId(positional.join(' '))
     const body = {}
     if (flags[nameField]) body[nameField] = flags[nameField]
@@ -318,7 +318,7 @@ function registerCrud(domain, { plural, nameField, hasDescription }) {
 
   commands[`${domain} delete`] = async (args) => {
     const { positional } = parseFlags(args)
-    if (!positional[0]) die(`Usage: oc ${domain} delete <name or id>`)
+    if (!positional[0]) die(`Usage: gerbil ${domain} delete <name or id>`)
     const id = await resolveId(positional.join(' '))
     await api('DELETE', `/${p}/${id}`)
     if (JSON_OUTPUT) return out({ success: true })
@@ -329,7 +329,7 @@ function registerCrud(domain, { plural, nameField, hasDescription }) {
     const { positional, flags } = parseFlags(args)
     const query = positional.join(' ')
     const tag = flags.tag
-    if (!query && !tag) die(`Usage: oc ${domain} search <query> [--tag <tag>]`)
+    if (!query && !tag) die(`Usage: gerbil ${domain} search <query> [--tag <tag>]`)
     const params = new URLSearchParams()
     if (query) params.set('q', query)
     if (tag) params.set('tag', tag)
@@ -344,13 +344,13 @@ function registerCrud(domain, { plural, nameField, hasDescription }) {
     console.log(dim(`\n${items.length} results`))
   }
 
-  HELP[`${domain} list`] = `List all ${p}\n  Usage: oc ${domain} list [--json]`
-  HELP[`${domain} get`] = `Show a ${domain} by name or ID\n  Usage: oc ${domain} get <name or id> [--json]`
-  HELP[`${domain} create`] = `Create a new ${domain}\n  Usage: oc ${domain} create <${nameField}> --file <path> [--tags a,b] [--teams t1,t2] [--org-wide]${hasDescription ? ' [--description "..."]' : ''}`
-  HELP[`${domain} update`] = `Update an existing ${domain}\n  Usage: oc ${domain} update <name or id> [--file <path>] [--${nameField} "new"] [--tags a,b] [--teams t1,t2] [--org-wide] [--no-org-wide]`
-  HELP[`${domain} delete`] = `Delete a ${domain}\n  Usage: oc ${domain} delete <name or id>`
-  HELP[`${domain} search`] = `Search ${p} by text or tag\n  Usage: oc ${domain} search <query> [--tag <tag>]\n\n  Examples:\n    oc ${domain} search hono\n    oc ${domain} search --tag bonnard-stack`
-  HELP[`${domain} template`] = `Show example ${domain} content\n  Usage: oc ${domain} template`
+  HELP[`${domain} list`] = `List all ${p}\n  Usage: gerbil ${domain} list [--json]`
+  HELP[`${domain} get`] = `Show a ${domain} by name or ID\n  Usage: gerbil ${domain} get <name or id> [--json]`
+  HELP[`${domain} create`] = `Create a new ${domain}\n  Usage: gerbil ${domain} create <${nameField}> --file <path> [--tags a,b] [--teams t1,t2] [--org-wide]${hasDescription ? ' [--description "..."]' : ''}`
+  HELP[`${domain} update`] = `Update an existing ${domain}\n  Usage: gerbil ${domain} update <name or id> [--file <path>] [--${nameField} "new"] [--tags a,b] [--teams t1,t2] [--org-wide] [--no-org-wide]`
+  HELP[`${domain} delete`] = `Delete a ${domain}\n  Usage: gerbil ${domain} delete <name or id>`
+  HELP[`${domain} search`] = `Search ${p} by text or tag\n  Usage: gerbil ${domain} search <query> [--tag <tag>]\n\n  Examples:\n    gerbil ${domain} search hono\n    gerbil ${domain} search --tag bonnard-stack`
+  HELP[`${domain} template`] = `Show example ${domain} content\n  Usage: gerbil ${domain} template`
 }
 
 registerCrud('skill', { plural: 'skills', nameField: 'name', hasDescription: true })
@@ -468,7 +468,7 @@ commands['teams list'] = async () => {
 
 commands['teams get'] = async (args) => {
   const { positional } = parseFlags(args)
-  if (!positional[0]) die('Usage: oc teams get <name or id>')
+  if (!positional[0]) die('Usage: gerbil teams get <name or id>')
   const id = await resolveTeamId(positional.join(' '))
   const team = await api('GET', `/teams/${id}`)
   if (JSON_OUTPUT) return out(team)
@@ -482,7 +482,7 @@ commands['teams get'] = async (args) => {
 
 commands['teams create'] = async (args) => {
   const { positional } = parseFlags(args)
-  if (!positional[0]) die('Usage: oc teams create <name>')
+  if (!positional[0]) die('Usage: gerbil teams create <name>')
   const team = await api('POST', '/teams', { name: positional.join(' ') })
   if (JSON_OUTPUT) return out(team)
   console.log(`${green('✓')} Created team: ${bold(team.name)} ${dim(team.id)}`)
@@ -490,7 +490,7 @@ commands['teams create'] = async (args) => {
 
 commands['teams delete'] = async (args) => {
   const { positional } = parseFlags(args)
-  if (!positional[0]) die('Usage: oc teams delete <name or id>')
+  if (!positional[0]) die('Usage: gerbil teams delete <name or id>')
   const id = await resolveTeamId(positional.join(' '))
   await api('DELETE', `/teams/${id}`)
   if (JSON_OUTPUT) return out({ success: true })
@@ -499,7 +499,7 @@ commands['teams delete'] = async (args) => {
 
 commands['teams add-member'] = async (args) => {
   const { positional } = parseFlags(args)
-  if (!positional[0] || !positional[1]) die('Usage: oc teams add-member <team-name> <email>')
+  if (!positional[0] || !positional[1]) die('Usage: gerbil teams add-member <team-name> <email>')
   const teamId = await resolveTeamId(positional[0])
   const userId = await resolveUserIdByEmail(positional[1])
   await api('POST', `/teams/${teamId}/members`, { userId })
@@ -509,7 +509,7 @@ commands['teams add-member'] = async (args) => {
 
 commands['teams rm-member'] = async (args) => {
   const { positional } = parseFlags(args)
-  if (!positional[0] || !positional[1]) die('Usage: oc teams rm-member <team-name> <email>')
+  if (!positional[0] || !positional[1]) die('Usage: gerbil teams rm-member <team-name> <email>')
   const teamId = await resolveTeamId(positional[0])
   const userId = await resolveUserIdByEmail(positional[1])
   await api('DELETE', `/teams/${teamId}/members/${userId}`)
@@ -534,7 +534,7 @@ commands['members list'] = async () => {
 
 commands['members invite'] = async (args) => {
   const { positional, flags } = parseFlags(args)
-  if (!positional[0]) die('Usage: oc members invite <email> [--role member|admin] [--team <team-name>]')
+  if (!positional[0]) die('Usage: gerbil members invite <email> [--role member|admin] [--team <team-name>]')
   const body = { email: positional[0], role: flags.role || 'member' }
   if (flags.team) {
     body.teamId = await resolveTeamId(flags.team)
@@ -546,7 +546,7 @@ commands['members invite'] = async (args) => {
 
 commands['members set-role'] = async (args) => {
   const { positional } = parseFlags(args)
-  if (!positional[0] || !positional[1]) die('Usage: oc members set-role <email> <role>')
+  if (!positional[0] || !positional[1]) die('Usage: gerbil members set-role <email> <role>')
   const memberId = await resolveMemberIdByEmail(positional[0])
   await api('PUT', `/members/${memberId}/role`, { role: positional[1] })
   if (JSON_OUTPUT) return out({ success: true })
@@ -555,7 +555,7 @@ commands['members set-role'] = async (args) => {
 
 commands['members remove'] = async (args) => {
   const { positional } = parseFlags(args)
-  if (!positional[0]) die('Usage: oc members remove <email>')
+  if (!positional[0]) die('Usage: gerbil members remove <email>')
   const memberId = await resolveMemberIdByEmail(positional[0])
   await api('DELETE', `/members/${memberId}`)
   if (JSON_OUTPUT) return out({ success: true })
@@ -564,22 +564,22 @@ commands['members remove'] = async (args) => {
 
 // --- Help ---
 
-HELP['teams list'] = 'List all teams with member/content counts\n  Usage: oc teams list [--json]'
-HELP['teams get'] = 'Show team details and members\n  Usage: oc teams get <name or id> [--json]'
-HELP['teams create'] = 'Create a new team\n  Usage: oc teams create <name>'
-HELP['teams delete'] = 'Delete a team\n  Usage: oc teams delete <name or id>'
-HELP['teams add-member'] = 'Add a member to a team\n  Usage: oc teams add-member <team-name> <email>'
-HELP['teams rm-member'] = 'Remove a member from a team\n  Usage: oc teams rm-member <team-name> <email>'
-HELP['members list'] = 'List all org members with teams and roles\n  Usage: oc members list [--json]'
-HELP['members invite'] = 'Invite a new member to the org\n  Usage: oc members invite <email> [--role member|admin] [--team <team-name>]'
-HELP['members set-role'] = 'Change a member\'s role\n  Usage: oc members set-role <email> <role>'
-HELP['members remove'] = 'Remove a member from the org\n  Usage: oc members remove <email>'
-HELP['whoami'] = 'Show current user identity and organization\n  Usage: oc whoami [--json]'
-HELP['sync'] = 'Re-sync skills, rules, and docs from the server\n  Usage: oc sync [--json]'
+HELP['teams list'] = 'List all teams with member/content counts\n  Usage: gerbil teams list [--json]'
+HELP['teams get'] = 'Show team details and members\n  Usage: gerbil teams get <name or id> [--json]'
+HELP['teams create'] = 'Create a new team\n  Usage: gerbil teams create <name>'
+HELP['teams delete'] = 'Delete a team\n  Usage: gerbil teams delete <name or id>'
+HELP['teams add-member'] = 'Add a member to a team\n  Usage: gerbil teams add-member <team-name> <email>'
+HELP['teams rm-member'] = 'Remove a member from a team\n  Usage: gerbil teams rm-member <team-name> <email>'
+HELP['members list'] = 'List all org members with teams and roles\n  Usage: gerbil members list [--json]'
+HELP['members invite'] = 'Invite a new member to the org\n  Usage: gerbil members invite <email> [--role member|admin] [--team <team-name>]'
+HELP['members set-role'] = 'Change a member\'s role\n  Usage: gerbil members set-role <email> <role>'
+HELP['members remove'] = 'Remove a member from the org\n  Usage: gerbil members remove <email>'
+HELP['whoami'] = 'Show current user identity and organization\n  Usage: gerbil whoami [--json]'
+HELP['sync'] = 'Re-sync skills, rules, and docs from the server\n  Usage: gerbil sync [--json]'
 
 commands.help = async () => {
-  console.log(`${bold('oc')}: the Gerbil CLI\n`)
-  console.log('Usage: oc <command> [args] [--json]\n')
+  console.log(`${bold('gerbil')}: the Gerbil CLI\n`)
+  console.log('Usage: gerbil <command> [args] [--json]\n')
   console.log(bold('General:'))
   console.log('  whoami                          Show current user')
   console.log('  sync                            Re-sync content from server')
@@ -611,9 +611,9 @@ async function main() {
   // --help for a specific command
   if (hasHelp) {
     const key = action ? `${domain} ${action}` : domain
-    if (HELP[key]) return console.log(`\n${bold('oc ' + key)}\n\n${HELP[key]}\n`)
+    if (HELP[key]) return console.log(`\n${bold('gerbil ' + key)}\n\n${HELP[key]}\n`)
     if (Object.keys(HELP).some(k => k.startsWith(domain + ' '))) {
-      console.log(`\n${bold('oc ' + domain)}\n`)
+      console.log(`\n${bold('gerbil ' + domain)}\n`)
       Object.keys(HELP).filter(k => k.startsWith(domain + ' ')).forEach(k => {
         console.log(`  ${bold(k.split(' ')[1].padEnd(12))} ${HELP[k].split('\n')[0]}`)
       })
@@ -639,11 +639,11 @@ async function main() {
     const actions = Object.keys(commands)
       .filter(k => k.startsWith(domain + ' '))
       .map(k => k.split(' ')[1])
-    console.log(`Usage: oc ${domain} <${actions.join('|')}>`)
+    console.log(`Usage: gerbil ${domain} <${actions.join('|')}>`)
     return
   }
 
-  die(`Unknown command: ${args.join(' ')}. Run 'oc help' for usage.`)
+  die(`Unknown command: ${args.join(' ')}. Run 'gerbil help' for usage.`)
 }
 
 main().catch(err => {

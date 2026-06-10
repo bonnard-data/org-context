@@ -1,12 +1,12 @@
 ---
 description: Re-sync skills, rules, and docs from the server
-allowed-tools: Bash(oc:*)
+allowed-tools: Bash(gerbil:*)
 ---
 
 Run the sync command and report the results:
 
 ```bash
-oc sync
+gerbil sync
 ```
 
 After reporting the results, tell the user:

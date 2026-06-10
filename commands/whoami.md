@@ -1,10 +1,10 @@
 ---
 description: Show current user identity and organization info
-allowed-tools: Bash(oc:*)
+allowed-tools: Bash(gerbil:*)
 ---
 
 Run this command and show the output to the user:
 
 ```bash
-oc whoami
+gerbil whoami
 ```

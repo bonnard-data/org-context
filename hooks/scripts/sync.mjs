@@ -58,19 +58,19 @@ try {
     ? join(projectDir, '.claude', 'rules')
     : join(HOME, '.claude', 'rules')
   mkdirSync(rulesDir, { recursive: true })
-  // Clean old oc- prefixed rules before writing new ones
+  // Clean old gerbil- prefixed rules before writing new ones
   try {
     for (const f of readdirSync(rulesDir)) {
-      if (f.startsWith('oc-') && f.endsWith('.md')) rmSync(join(rulesDir, f), { force: true })
+      if (f.startsWith('gerbil-') && f.endsWith('.md')) rmSync(join(rulesDir, f), { force: true })
     }
   } catch {}
   for (const rule of data.rules || []) {
-    writeFileSync(join(rulesDir, `oc-${safeName(rule.name)}.md`), rule.content)
+    writeFileSync(join(rulesDir, `gerbil-${safeName(rule.name)}.md`), rule.content)
   }
 
   // Write static agent guide rule
   const skillNames = (data.skills || []).map(s => s.name)
-  writeFileSync(join(rulesDir, 'oc-agent-guide.md'), `# Gerbil
+  writeFileSync(join(rulesDir, 'gerbil-agent-guide.md'), `# Gerbil
 
 You have the Gerbil plugin installed. It provides your organization's knowledge, standards, and tools.
 
@@ -79,22 +79,22 @@ You have the Gerbil plugin installed. It provides your organization's knowledge,
 - **Skills** (slash commands): ${skillNames.length ? skillNames.map(n => '/' + safeName(n)).join(', ') : 'none synced'}
 - **Rules** (always-on context): ${(data.rules || []).length} org rules loaded — follow them
 - **MCP tools**: Use \`search_docs\` to search company documentation, \`list_docs\` to browse available docs
-- **CLI** (\`oc\`): Admin tool for managing org content
+- **CLI** (\`gerbil\`): Admin tool for managing org content
 
 ## CLI reference
 
 \`\`\`
-oc whoami                              # Current user info
-oc sync                                # Sync status
+gerbil whoami                              # Current user info
+gerbil sync                                # Sync status
 
-oc skill list|get|create|update|delete # Manage skills
-oc rule  list|get|create|update|delete # Manage rules
-oc doc   list|get|create|update|delete|search # Manage docs
+gerbil skill list|get|create|update|delete # Manage skills
+gerbil rule  list|get|create|update|delete # Manage rules
+gerbil doc   list|get|create|update|delete|search # Manage docs
 
-oc skill template / oc rule template / oc doc template  # Show example content
+gerbil skill template / gerbil rule template / gerbil doc template  # Show example content
 
-oc teams   list|get|create|delete|add-member|rm-member
-oc members list|invite|set-role|remove
+gerbil teams   list|get|create|delete|add-member|rm-member
+gerbil members list|invite|set-role|remove
 \`\`\`
 
 Flags: \`--json\` for machine-readable output, \`--file <path>\` for content, \`--tags a,b\`, \`--org-wide\`, \`--description "..."\`
@@ -110,10 +110,10 @@ Flags: \`--json\` for machine-readable output, \`--file <path>\` for content, \`
 ## When to use what
 
 - Need company knowledge? → \`search_docs\` MCP tool
-- Need to see what's available? → \`oc doc list\`, \`oc skill list\`
-- Need to create/edit content? → Write content to a temp file, then \`oc <type> create "Name" --file /tmp/content.md\`
-- User asks about their setup? → \`oc whoami\`, \`oc teams list\`
-- Need a content example? → \`oc skill template\`, \`oc rule template\`, \`oc doc template\`
+- Need to see what's available? → \`gerbil doc list\`, \`gerbil skill list\`
+- Need to create/edit content? → Write content to a temp file, then \`gerbil <type> create "Name" --file /tmp/content.md\`
+- User asks about their setup? → \`gerbil whoami\`, \`gerbil teams list\`
+- Need a content example? → \`gerbil skill template\`, \`gerbil rule template\`, \`gerbil doc template\`
 `)
 
   // Write CLI tools to bin/
@@ -121,11 +121,11 @@ Flags: \`--json\` for machine-readable output, \`--file <path>\` for content, \`
   mkdirSync(binDir, { recursive: true })
   try {
     for (const f of readdirSync(binDir)) {
-      if (f.startsWith('oc-')) rmSync(join(binDir, f), { force: true })
+      if (f.startsWith('gerbil-')) rmSync(join(binDir, f), { force: true })
     }
   } catch {}
   for (const tool of data.cliTools || []) {
-    const toolPath = join(binDir, `oc-${safeName(tool.name)}`)
+    const toolPath = join(binDir, `gerbil-${safeName(tool.name)}`)
     writeFileSync(toolPath, tool.content)
     chmodSync(toolPath, 0o755)
   }
@@ -155,7 +155,7 @@ Flags: \`--json\` for machine-readable output, \`--file <path>\` for content, \`
 
 Available skills: ${skillList}
 MCP tools: search_docs, list_docs, list_alerts, acknowledge_alert
-CLI (oc): whoami, sync, skill list|get|create|update|delete|template, rule list|get|create|update|delete|template, doc list|get|create|update|delete|search|template, teams list|get|create|delete|add-member|rm-member, members list|invite|set-role|remove. Use --json for structured output, --file <path> for content.`
+CLI (gerbil): whoami, sync, skill list|get|create|update|delete|template, rule list|get|create|update|delete|template, doc list|get|create|update|delete|search|template, teams list|get|create|delete|add-member|rm-member, members list|invite|set-role|remove. Use --json for structured output, --file <path> for content.`
     }
   }
   process.stdout.write(JSON.stringify(output))
