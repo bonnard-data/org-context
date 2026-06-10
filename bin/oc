@@ -8,14 +8,12 @@ function loadApiKey() {
   if (process.env.CLAUDE_PLUGIN_OPTION_APIKEY) return process.env.CLAUDE_PLUGIN_OPTION_APIKEY
   try {
     const settings = JSON.parse(readFileSync(join(homedir(), '.claude', 'settings.json'), 'utf8'))
-    return settings.pluginConfigs?.['gerbil@bonnard']?.options?.apiKey
-      || settings.pluginConfigs?.['org-context@bonnard-org-context']?.options?.apiKey // legacy install id
-      || ''
+    return settings.pluginConfigs?.['gerbil@bonnard']?.options?.apiKey || ''
   } catch { return '' }
 }
 
 const API_KEY = loadApiKey()
-const API_URL = process.env.GERBIL_API || process.env.ORG_CONTEXT_API || 'https://app.gerbil.dev/api'
+const API_URL = process.env.GERBIL_API || 'https://app.gerbil.dev/api'
 const JSON_OUTPUT = process.argv.includes('--json')
 
 // ANSI colors

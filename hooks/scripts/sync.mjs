@@ -6,7 +6,7 @@ import { homedir } from 'node:os'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const PLUGIN_ROOT = process.env.CLAUDE_PLUGIN_ROOT || join(__dirname, '..', '..')
-const API_URL = process.env.GERBIL_API || process.env.ORG_CONTEXT_API || 'https://app.gerbil.dev/api'
+const API_URL = process.env.GERBIL_API || 'https://app.gerbil.dev/api'
 const HOME = process.env.HOME || homedir()
 const API_KEY = process.env.CLAUDE_PLUGIN_OPTION_APIKEY || ''
 
