@@ -282,15 +282,22 @@ function registerCrud(domain, { plural, nameField, hasDescription }) {
   commands[`${domain} create`] = async (args) => {
     const { positional, flags } = parseFlags(args)
     const name = positional[0]
-    if (!name) die(`Usage: gerbil ${domain} create <${nameField}> --file <path> [--tags a,b] [--teams team1,team2] [--org-wide]`)
+    if (!name) die(`Usage: gerbil ${domain} create <${nameField}> --file <path> [--tags a,b] [--teams team1,team2] [--no-org-wide]`)
     const content = readContent(flags)
     if (!content) die('Content required. Use --file <path> or --content "..."')
+    const teamIds = (await parseTeamIds(flags)) || []
+    // Default to org-wide so agents can see new content. --teams scopes it to
+    // those teams; --no-org-wide makes it private (admin-only) on purpose.
+    let orgWide
+    if ('no-org-wide' in flags) orgWide = false
+    else if ('org-wide' in flags) orgWide = true
+    else orgWide = teamIds.length === 0
     const body = {
       [nameField]: name,
       content,
       tags: parseTags(flags) || [],
-      teamIds: (await parseTeamIds(flags)) || [],
-      orgWide: 'org-wide' in flags,
+      teamIds,
+      orgWide,
     }
     if (hasDescription && flags.description) body.description = flags.description
     const item = await api('POST', `/${p}`, body)
@@ -346,7 +353,7 @@ function registerCrud(domain, { plural, nameField, hasDescription }) {
 
   HELP[`${domain} list`] = `List all ${p}\n  Usage: gerbil ${domain} list [--json]`
   HELP[`${domain} get`] = `Show a ${domain} by name or ID\n  Usage: gerbil ${domain} get <name or id> [--json]`
-  HELP[`${domain} create`] = `Create a new ${domain}\n  Usage: gerbil ${domain} create <${nameField}> --file <path> [--tags a,b] [--teams t1,t2] [--org-wide]${hasDescription ? ' [--description "..."]' : ''}`
+  HELP[`${domain} create`] = `Create a new ${domain}\n  Usage: gerbil ${domain} create <${nameField}> --file <path> [--tags a,b] [--teams t1,t2] [--no-org-wide]${hasDescription ? ' [--description "..."]' : ''}\n\n  Visibility: org-wide by default (visible to all members + agents).\n  --teams t1,t2  scope to specific teams · --no-org-wide  private (admin-only)`
   HELP[`${domain} update`] = `Update an existing ${domain}\n  Usage: gerbil ${domain} update <name or id> [--file <path>] [--${nameField} "new"] [--tags a,b] [--teams t1,t2] [--org-wide] [--no-org-wide]`
   HELP[`${domain} delete`] = `Delete a ${domain}\n  Usage: gerbil ${domain} delete <name or id>`
   HELP[`${domain} search`] = `Search ${p} by text or tag\n  Usage: gerbil ${domain} search <query> [--tag <tag>]\n\n  Examples:\n    gerbil ${domain} search hono\n    gerbil ${domain} search --tag bonnard-stack`
