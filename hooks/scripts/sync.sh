@@ -1,5 +1,5 @@
 #!/bin/bash
-# Org Context — SessionStart sync script
+# Gerbil: SessionStart sync script
 # Reads plugin.yaml, resolves user email → role, populates skills/commands/rules
 
 PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
@@ -52,7 +52,7 @@ fi
 
 # --- Hook output ---
 cat <<EOF
-{"hookSpecificOutput":{"hookEventName":"SessionStart","reloadSkills":true,"additionalContext":"[Org Context] Synced for ${EMAIL} (role: ${ROLE}). ${SKILL_COUNT} skills, ${CMD_COUNT} commands."}}
+{"hookSpecificOutput":{"hookEventName":"SessionStart","reloadSkills":true,"additionalContext":"[Gerbil] Synced for ${EMAIL} (role: ${ROLE}). ${SKILL_COUNT} skills, ${CMD_COUNT} commands."}}
 EOF
 
 exit 0

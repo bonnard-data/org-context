@@ -1,13 +1,13 @@
 {
-  "name": "bonnard-org-context",
+  "name": "bonnard",
   "owner": {
     "name": "Bonnard"
   },
   "plugins": [
     {
-      "name": "org-context",
+      "name": "gerbil",
       "source": "./",
-      "description": "Org Context — personalized skills, rules, and docs for AI coding assistants"
+      "description": "Gerbil: personalized skills, rules, and docs for AI coding assistants"
     }
   ]
 }

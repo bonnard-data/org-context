@@ -6,7 +6,7 @@ import { homedir } from 'node:os'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const PLUGIN_ROOT = process.env.CLAUDE_PLUGIN_ROOT || join(__dirname, '..', '..')
-const API_URL = process.env.ORG_CONTEXT_API || 'https://app.gerbil.dev/api'
+const API_URL = process.env.GERBIL_API || process.env.ORG_CONTEXT_API || 'https://app.gerbil.dev/api'
 const HOME = process.env.HOME || homedir()
 const API_KEY = process.env.CLAUDE_PLUGIN_OPTION_APIKEY || ''
 
@@ -19,7 +19,7 @@ if (!API_KEY) {
   const output = {
     hookSpecificOutput: {
       hookEventName: 'SessionStart',
-      additionalContext: '[Org Context] No API key configured. Generate one from the Install page in the dashboard, then set it in plugin settings.'
+      additionalContext: '[Gerbil] No API key configured. Generate one from the Install page in the dashboard, then set it in plugin settings.'
     }
   }
   process.stdout.write(JSON.stringify(output))
@@ -70,9 +70,9 @@ try {
 
   // Write static agent guide rule
   const skillNames = (data.skills || []).map(s => s.name)
-  writeFileSync(join(rulesDir, 'oc-agent-guide.md'), `# Org Context
+  writeFileSync(join(rulesDir, 'oc-agent-guide.md'), `# Gerbil
 
-You have the Org Context plugin installed. It provides your organization's knowledge, standards, and tools.
+You have the Gerbil plugin installed. It provides your organization's knowledge, standards, and tools.
 
 ## What you have
 
@@ -130,9 +130,9 @@ Flags: \`--json\` for machine-readable output, \`--file <path>\` for content, \`
     chmodSync(toolPath, 0o755)
   }
 
-  // Write MCP config — include org-context server with API key baked in
+  // Write MCP config, including the gerbil server with API key baked in
   const mcpServers = {
-    'org-context': {
+    'gerbil': {
       type: 'http',
       url: API_URL.replace('/api', '/mcp'),
       headers: { 'x-api-key': API_KEY },
@@ -151,7 +151,7 @@ Flags: \`--json\` for machine-readable output, \`--file <path>\` for content, \`
     hookSpecificOutput: {
       hookEventName: 'SessionStart',
       reloadSkills: true, reloadMcpServers: true,
-      additionalContext: `[Org Context] Synced for ${data.email} (teams: ${(data.teams || []).join(', ') || 'none'}). ${(data.skills || []).length} skills, ${(data.rules || []).length} rules, ${cliCount} CLI tools, ${mcpCount} MCPs.
+      additionalContext: `[Gerbil] Synced for ${data.email} (teams: ${(data.teams || []).join(', ') || 'none'}). ${(data.skills || []).length} skills, ${(data.rules || []).length} rules, ${cliCount} CLI tools, ${mcpCount} MCPs.
 
 Available skills: ${skillList}
 MCP tools: search_docs, list_docs, list_alerts, acknowledge_alert
@@ -160,11 +160,11 @@ CLI (oc): whoami, sync, skill list|get|create|update|delete|template, rule list|
   }
   process.stdout.write(JSON.stringify(output))
 } catch (err) {
-  process.stderr.write(`Org Context sync failed: ${err.message}\n`)
+  process.stderr.write(`Gerbil sync failed: ${err.message}\n`)
   const output = {
     hookSpecificOutput: {
       hookEventName: 'SessionStart',
-      additionalContext: `[Org Context] Sync failed: ${err.message}`
+      additionalContext: `[Gerbil] Sync failed: ${err.message}`
     }
   }
   process.stdout.write(JSON.stringify(output))

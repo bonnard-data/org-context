@@ -1,23 +1,23 @@
 {
-  "name": "org-context",
-  "description": "Org Context — personalized skills, rules, and docs for AI coding assistants",
+  "name": "gerbil",
+  "description": "Gerbil: personalized skills, rules, and docs for AI coding assistants",
   "author": {
     "name": "Bonnard"
   },
-  "repository": "https://github.com/bonnard-data/org-context",
+  "repository": "https://github.com/bonnard-data/gerbil-plugin",
   "license": "MIT",
   "skills": "./skills/",
   "userConfig": {
     "apiKey": {
       "type": "string",
       "title": "API Key",
-      "description": "Your Org Context API key. Generate one at https://app.gerbil.dev/api-keys or from the API Keys page in the dashboard.",
+      "description": "Your Gerbil API key. Generate one at https://app.gerbil.dev/api-keys or from the API Keys page in the dashboard.",
       "sensitive": false,
       "required": true
     }
   },
   "mcpServers": {
-    "org-context": {
+    "gerbil": {
       "type": "http",
       "url": "https://app.gerbil.dev/mcp",
       "headers": {
